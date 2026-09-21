@@ -1,0 +1,40 @@
+# Local dev / tooling
+.venv/
+__pycache__/
+node_modules/
+client/node_modules/
+tests/
+scripts/
+
+# Build output & cache
+client/dist/
+dist/
+.vercel/
+
+# Environments
+.env
+.env.local
+
+# Documents & reference images (not part of the app)
+*.pdf
+*.docx
+*.jpeg
+*.jpg
+*.png
+*.ps1
+*.py
+~$*
+
+# Edge bridge daemon is deployed on-site, not on the web host
+edge-bridge/
+
+# SQLite ephemera (legacy — app is PostgreSQL-only now)
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+
+# Local seed scripts & DB tooling
+server/db/seedPg.js
+server/db/seedData.js
+server/db/schema_v2.sql
