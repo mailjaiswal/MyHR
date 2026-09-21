@@ -121,6 +121,11 @@ async function notify(event, ctx = {}) {
       `, id, event, ctx.dedupeKey || null, r.email, r.name || null, content.subject, content.html, content.text);
       queued += 1;
     }
+    if (queued > 0) {
+      // Deliver promptly in-request: Vercel Hobby only allows once-daily crons,
+      // so we can't rely on the flush cron for latency. Best-effort + never throws.
+      try { await flushOutbox(queued + 5); } catch { /* daily cron will retry */ }
+    }
     return { queued };
   } catch (e) {
     console.error('[notify] failed for', event, ':', e.message);
