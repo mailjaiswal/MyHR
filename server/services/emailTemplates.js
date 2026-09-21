@@ -84,7 +84,7 @@ const BUILDERS = {
   },
   'correction.decided': {
     subject: (c) => `Attendance correction ${c.decision} for ${c.dutyDate}`,
-    title: `Your attendance correction was ${c.decision.toLowerCase()}`,
+    title: (c) => `Your attendance correction was ${c.decision.toLowerCase()}`,
     intro: (c) => [`The correction request for duty date ${c.dutyDate} has been ${c.decision.toLowerCase()}.`],
     lines: (c) => [['Decision', c.decision], ['Reviewed by', c.decidedByName || '-'], ['Note', c.note || '-']]
   },
@@ -165,10 +165,12 @@ const BUILDERS = {
 function buildEventEmail(event, ctx) {
   const b = BUILDERS[event];
   if (!b) return null;
+  // `title` may be a plain string (most templates) or a function of ctx (dynamic ones).
+  const title = typeof b.title === 'function' ? b.title(ctx) : b.title;
   return {
     subject: b.subject(ctx),
-    html: renderEmail({ orgName: ctx.orgName, title: b.title(ctx), intro: b.intro(ctx), lines: b.lines(ctx), note: b.note, cta: b.cta ? b.cta(ctx) : null }),
-    text: renderText(b.title(ctx), b.lines(ctx), b.intro(ctx).map(s => String(s).replace(/<[^>]+>/g, '')))
+    html: renderEmail({ orgName: ctx.orgName, title, intro: b.intro(ctx), lines: b.lines(ctx), note: b.note, cta: b.cta ? b.cta(ctx) : null }),
+    text: renderText(title, b.lines(ctx), b.intro(ctx).map(s => String(s).replace(/<[^>]+>/g, '')))
   };
 }
 

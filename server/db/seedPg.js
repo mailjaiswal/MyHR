@@ -181,10 +181,10 @@ async function seedEmployees() {
   console.log('Seeded employees with password hashes and role_ids.');
 }
 
-// Generate ~14 days of realistic punches through the real ingestion engine.
+// Generate ~60 days of realistic punches through the real ingestion engine.
 async function seedPunches() {
   const now = new Date();
-  const days = 14;
+  const days = 60;
   const dayCounters = {};
 
   for (const s of STAFF) {

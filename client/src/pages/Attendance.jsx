@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, CalendarDays, Fingerprint, Check, Loader2, Download, Clock3, ShieldCheck, X, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Search, CalendarDays, Fingerprint, Check, Loader2, Download, Clock3, ShieldCheck, X, ThumbsUp, ThumbsDown, Info } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDateRange } from '../hooks/useDateRange';
 import DateRangePicker from '../components/DateRangePicker';
@@ -24,7 +24,7 @@ function fmtTime(t) {
   return t.slice(0, 5);
 }
 
-function MusterTable({ records, busy, canManage, onRegularize, onAdjust }) {
+function MusterTable({ records, busy, canManage, onRegularize, onAdjust, onOpen }) {
   return (
     <div className="table-wrap">
       <table className="swaniki-table">
@@ -40,10 +40,10 @@ function MusterTable({ records, busy, canManage, onRegularize, onAdjust }) {
             return (
               <tr key={r.id}>
                 <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                  <div onClick={() => onOpen(r)} title="View detailed attendance" style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer' }}>
                     <span className="avatar-sq">{(r.full_name || '?')[0]}</span>
                     <div>
-                      <div style={{ fontWeight: 600, color: 'var(--text-heading)' }}>{r.full_name}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-heading)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>{r.full_name}<Info size={12} style={{ opacity: 0.45 }} /></div>
                       <div className="mono" style={{ fontSize: '0.6563rem', color: 'var(--text-caption)' }}>{r.employee_code}</div>
                     </div>
                   </div>
@@ -106,6 +106,7 @@ export default function Attendance() {
   const [adjHours, setAdjHours] = useState('');
   const [adjReason, setAdjReason] = useState('');
   const [adjSaving, setAdjSaving] = useState(false);
+  const [detail, setDetail] = useState(null);
 
   const loadRecords = useCallback(() => {
     setLoading(true);
@@ -152,6 +153,12 @@ export default function Attendance() {
     setAdjustFor(rec);
     setAdjHours(String(Number(rec.total_hours || 0).toFixed(1)));
     setAdjReason('');
+  };
+
+  const openDetail = (rec) => {
+    const rows = records.filter(r => r.employee_id === rec.employee_id)
+      .sort((a, b) => (a.duty_date < b.duty_date ? 1 : -1));
+    setDetail({ emp: rec, rows });
   };
 
   const submitAdjust = async () => {
@@ -291,7 +298,7 @@ export default function Attendance() {
         {loading ? (
           <div className="loading-state"><Loader2 size={24} className="spin" /><p>Loading records…</p></div>
         ) : (
-          <MusterTable records={records} busy={busy} canManage={canManage} onRegularize={regularize} onAdjust={openAdjust} />
+          <MusterTable records={records} busy={busy} canManage={canManage} onRegularize={regularize} onAdjust={openAdjust} onOpen={openDetail} />
         )}
       </section>
 
@@ -354,6 +361,82 @@ export default function Attendance() {
           </div>
         </div>
       )}
+
+      {detail && (() => {
+        const rows = detail.rows;
+        const emp = detail.emp;
+        const present = rows.filter(r => ['PRESENT', 'OVERTIME', 'REGULARIZED'].includes(r.status)).length;
+        const half = rows.filter(r => r.status === 'HALF_DAY').length;
+        const absent = rows.filter(r => r.status === 'ABSENT').length;
+        const totalH = rows.reduce((s, r) => s + Number(r.total_hours || 0), 0);
+        const otH = rows.reduce((s, r) => s + Number(r.overtime_hours || 0), 0);
+        const lateCount = rows.filter(r => Number(r.late_minutes || 0) > 0).length;
+        const chips = [
+          ['Present', present, '#10b981'], ['Half day', half, '#f59e0b'], ['Absent', absent, '#ef4444'],
+          ['Late', lateCount, 'var(--text-heading)'], ['Hours', `${totalH.toFixed(1)}h`, 'var(--brand-primary)'], ['Overtime', `${otH.toFixed(1)}h`, 'var(--brand-primary)']
+        ];
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+            <div className="swaniki-card" style={{ width: '100%', maxWidth: 720, maxHeight: '88vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+              <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: 'var(--bg-surface-subtle)' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                  <span className="avatar-sq" style={{ width: 44, height: 44, fontSize: '1.1rem' }}>{(emp.full_name || '?')[0]}</span>
+                  <div>
+                    <h3 style={{ margin: 0, color: 'var(--text-heading)' }}>{emp.full_name}</h3>
+                    <div className="mono" style={{ fontSize: '0.72rem', color: 'var(--text-caption)' }}>{emp.employee_code} · {emp.designation} · {emp.department_name}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-caption)', marginTop: '0.15rem' }}>Shift · {emp.shift_name}</div>
+                  </div>
+                </div>
+                <button className="icon-btn" onClick={() => setDetail(null)}><X size={17} /></button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(104px, 1fr))', gap: '0.6rem', padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                {chips.map(([k, v, c]) => (
+                  <div key={k} style={{ background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-color)', borderRadius: '0.6rem', padding: '0.55rem 0.7rem' }}>
+                    <div style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--text-caption)' }}>{k}</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 700, color: c }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ padding: '0.5rem 1.5rem 1.5rem', overflowY: 'auto' }}>
+                <div className="section-title" style={{ margin: '0.85rem 0 0.5rem', fontSize: '0.8rem' }}>Day-by-day · {rows.length} records</div>
+                <div className="table-wrap">
+                  <table className="swaniki-table">
+                    <thead><tr><th>Date</th><th>In</th><th>Out</th><th>Reg h</th><th>OT h</th><th>Late</th><th>Total</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {rows.map(r => {
+                        const st = STATUS_META[r.status] || STATUS_META.ABSENT;
+                        return (
+                          <tr key={r.id}>
+                            <td className="mono">{new Date(r.duty_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
+                            <td className="mono">{fmtTime(r.first_in_time)}</td>
+                            <td className="mono">{fmtTime(r.last_out_time)}</td>
+                            <td className="mono">{Number(r.regular_hours || 0).toFixed(1)}</td>
+                            <td className="mono">{Number(r.overtime_hours || 0).toFixed(1)}</td>
+                            <td className="mono">{Number(r.late_minutes || 0) > 0 ? `${r.late_minutes}m` : '—'}</td>
+                            <td className="mono"><b>{Number(r.total_hours || 0).toFixed(1)}h</b></td>
+                            <td><span className={`status-pill ${st.cls}`}>{st.label}</span></td>
+                          </tr>
+                        );
+                      })}
+                      {rows.length === 0 && <tr><td colSpan={8}><div className="empty-state"><p>No records.</p></div></td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                {rows.some(r => r.regularization_notes) && (
+                  <div style={{ marginTop: '0.85rem', fontSize: '0.72rem', color: 'var(--text-caption)' }}>
+                    Regularized days: {rows.filter(r => r.regularization_notes).map(r => new Date(r.duty_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })).join(', ')}
+                  </div>
+                )}
+                <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setDetail(null)}>Close</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -96,7 +96,7 @@ router.get('/records', async (req, res) => {
     }
 
     if (search) {
-      query += ` AND (e.full_name LIKE ? OR e.employee_code LIKE ?)`;
+      query += ` AND (e.full_name ILIKE ? OR e.employee_code ILIKE ?)`;
       params.push(`%${search}%`, `%${search}%`);
     }
 
