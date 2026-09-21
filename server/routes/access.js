@@ -5,6 +5,8 @@ const router = express.Router();
 const { db } = require('../db/database');
 const { requireAuth } = require('../middleware/authGuard');
 const { accessGuard, requirePerm, clearRoleCache } = require('../middleware/accessGuard');
+const { audit } = require('../services/auditService');
+const { notify } = require('../services/notificationService');
 
 // All endpoints require auth + ACCESS_MANAGE permission
 router.use(requireAuth, accessGuard, requirePerm('ACCESS_MANAGE'));
@@ -41,6 +43,11 @@ router.post('/roles', async (req, res) => {
 
     clearRoleCache();
     const created = await db.get('SELECT * FROM roles WHERE id = ?', id);
+    await audit(req, 'access.role_create', {
+      entityType: 'role', entityId: id,
+      summary: `Role '${name}' (${data_scope || 'SELF'}) created with ${(permissions || []).length} permission(s)`,
+      details: { name, technical_key: technical_key.toUpperCase(), data_scope: data_scope || 'SELF', permissions: permissions || [] }
+    });
     return res.status(201).json({ success: true, role: created });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -72,6 +79,15 @@ router.patch('/roles/:id', async (req, res) => {
 
     clearRoleCache();
     const updated = await db.get('SELECT * FROM roles WHERE id = ?', id);
+    let oldPerms = []; try { oldPerms = typeof role.permissions === 'string' ? JSON.parse(role.permissions) : (role.permissions || []); } catch {}
+    await audit(req, 'access.role_update', {
+      entityType: 'role', entityId: id,
+      summary: `Role '${updated.name}' updated${permissions ? ` (now ${permissions.length} permission(s))` : ''}`,
+      details: {
+        before: { name: role.name, data_scope: role.data_scope, permissions: oldPerms },
+        after: { name: updated.name, data_scope: updated.data_scope, permissions: typeof updated.permissions === 'string' ? JSON.parse(updated.permissions) : updated.permissions }
+      }
+    });
     return res.json({ success: true, role: updated });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -94,6 +110,7 @@ router.delete('/roles/:id', async (req, res) => {
 
     await db.run('DELETE FROM roles WHERE id = ?', id);
     clearRoleCache();
+    await audit(req, 'access.role_delete', { entityType: 'role', entityId: id, summary: `Role '${role.name}' (${role.technical_key}) deleted`, details: { name: role.name, technical_key: role.technical_key, data_scope: role.data_scope } });
     return res.json({ success: true, message: 'Role deleted' });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -124,13 +141,20 @@ router.patch('/employees/:id/role', async (req, res) => {
     const { role_id } = req.body;
     if (!role_id) return res.status(400).json({ error: 'role_id is required' });
 
-    const emp = await db.get('SELECT id FROM employees WHERE id = ?', id);
+    const emp = await db.get('SELECT id, full_name, role_id FROM employees WHERE id = ?', id);
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
 
-    const role = await db.get('SELECT id FROM roles WHERE id = ?', role_id);
+    const role = await db.get('SELECT id, name FROM roles WHERE id = ?', role_id);
     if (!role) return res.status(400).json({ error: 'Role not found' });
 
+    const prevRole = emp.role_id ? await db.get('SELECT name FROM roles WHERE id = ?', emp.role_id) : null;
     await db.run('UPDATE employees SET role_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', role_id, id);
+    await audit(req, 'access.employee_role_assign', {
+      entityType: 'employee', entityId: id,
+      summary: `Role for '${emp.full_name}' changed from '${prevRole?.name || 'none'}' to '${role.name}'`,
+      details: { from: prevRole?.name || null, to: role.name }
+    });
+    await notify('employee.role_changed', { employeeId: id, roleName: role.name, actorName: req.currentUser?.full_name });
     return res.json({ success: true, message: 'Role assigned' });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -161,17 +185,24 @@ router.patch('/employees/:id/manager', async (req, res) => {
     const { id } = req.params;
     const { manager_id } = req.body;
 
-    const emp = await db.get('SELECT id FROM employees WHERE id = ?', id);
+    const emp = await db.get('SELECT id, full_name, manager_id FROM employees WHERE id = ?', id);
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
 
+    let mgr = null;
     if (manager_id) {
-      const mgr = await db.get('SELECT id FROM employees WHERE id = ?', manager_id);
+      mgr = await db.get('SELECT id, full_name FROM employees WHERE id = ?', manager_id);
       if (!mgr) return res.status(400).json({ error: 'Manager not found' });
       // Prevent self-reference
       if (manager_id === id) return res.status(400).json({ error: 'Cannot be own manager' });
     }
 
     await db.run('UPDATE employees SET manager_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', manager_id || null, id);
+    await audit(req, 'access.employee_manager_assign', {
+      entityType: 'employee', entityId: id,
+      summary: `Reporting manager for '${emp.full_name}' set to '${mgr?.full_name || '(none)'}'`,
+      details: { from: emp.manager_id || null, to: manager_id || null }
+    });
+    await notify('employee.manager_changed', { employeeId: id, managerName: mgr?.full_name || null, actorName: req.currentUser?.full_name });
     return res.json({ success: true, message: 'Manager updated' });
   } catch (err) {
     return res.status(500).json({ error: err.message });

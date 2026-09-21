@@ -7,6 +7,16 @@ const { generateBankDisbursementCSV, generateTallyJV } = require('../services/ex
 const { getSettings } = require('../services/settingsService');
 const { requireAuth } = require('../middleware/authGuard');
 const { accessGuard, requirePerm, scopeFilter } = require('../middleware/accessGuard');
+const { audit } = require('../services/auditService');
+const { notify } = require('../services/notificationService');
+
+// '2026-08' -> 'Aug 2026' for human-friendly emails/audit summaries.
+function monthLabel(monthYear) {
+  const [y, m] = String(monthYear).split('-');
+  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${names[parseInt(m, 10) - 1] || m} ${y}`;
+}
+const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
 
 // All payroll endpoints require auth + access scope
 router.use(requireAuth, accessGuard);
@@ -57,6 +67,31 @@ router.post('/process', requirePerm('PAYROLL_MANAGE'), async (req, res) => {
   try {
     const { monthYear = new Date().toISOString().slice(0, 7) } = req.body;
     const summary = await runMonthlyPayroll(monthYear);
+
+    await audit(req, 'payroll.process', {
+      entityType: 'payroll_run', entityId: summary.runId,
+      summary: `Payroll processed for ${monthLabel(monthYear)}: ${summary.totalEmployees} employee(s), net ${inr(summary.totalNet)}`,
+      details: { monthYear, totalEmployees: summary.totalEmployees, totalGross: summary.totalGross, totalNet: summary.totalNet }
+    });
+    await notify('payroll.completed', {
+      monthLabel: monthLabel(monthYear),
+      count: summary.totalEmployees,
+      gross: inr(summary.totalGross),
+      net: inr(summary.totalNet),
+      dedupeKey: `payroll_completed|${monthYear}|${summary.runId}`
+    });
+    // Per-employee "payslip ready" fan-out (dedup keeps re-clicking process from
+    // double-emailing the same month).
+    const slips = await db.all('SELECT employee_id, net_salary FROM payslips WHERE month_year = ?', monthYear);
+    for (const s of slips) {
+      await notify('payslip.generated', {
+        employeeId: s.employee_id,
+        monthLabel: monthLabel(monthYear),
+        net: inr(s.net_salary),
+        dedupeKey: `payslip|${monthYear}|${s.employee_id}`
+      });
+    }
+
     return res.json({
       success: true,
       message: `Payroll processed successfully for ${monthYear}`,
@@ -174,11 +209,12 @@ router.get('/payslip/:employeeId/:monthYear', requirePerm('PAYROLL_VIEW'), async
 });
 
 // 5. Download Bank Disbursement CSV (NEFT/RTGS format)
-router.get('/export/bank/:monthYear', async (req, res) => {
+router.get('/export/bank/:monthYear', requirePerm('EXPORTS'), async (req, res) => {
   try {
     const { monthYear } = req.params;
     const csvContent = await generateBankDisbursementCSV(monthYear);
     const settings = await getSettings();
+    await audit(req, 'payroll.export_bank', { entityType: 'payroll_run', entityId: monthYear, summary: `Bank NEFT disbursement CSV exported for ${monthLabel(monthYear)}` });
     const fileBase = settings.name.replace(/[^A-Za-z0-9]+/g, '_').toUpperCase();
 
     res.setHeader('Content-Type', 'text/csv');
@@ -190,11 +226,12 @@ router.get('/export/bank/:monthYear', async (req, res) => {
 });
 
 // 6. Download Tally ERP Journal Voucher XML
-router.get('/export/tally/:monthYear', async (req, res) => {
+router.get('/export/tally/:monthYear', requirePerm('EXPORTS'), async (req, res) => {
   try {
     const { monthYear } = req.params;
     const xmlContent = await generateTallyJV(monthYear);
     const settings = await getSettings();
+    await audit(req, 'payroll.export_tally', { entityType: 'payroll_run', entityId: monthYear, summary: `Tally journal voucher exported for ${monthLabel(monthYear)}` });
     const fileBase = settings.name.replace(/[^A-Za-z0-9]+/g, '_').toUpperCase();
 
     res.setHeader('Content-Type', 'application/xml');

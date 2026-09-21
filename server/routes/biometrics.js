@@ -3,6 +3,8 @@ const router = express.Router();
 const { db } = require('../db/database');
 const config = require('../config');
 const { ingestPunch } = require('../services/attendanceEngine');
+const { requireAuth } = require('../middleware/authGuard');
+const { accessGuard, requirePerm } = require('../middleware/accessGuard');
 
 // Server-Sent Events (SSE) Client Connections Registry
 const sseClients = new Set();
@@ -41,8 +43,13 @@ router.get('/stream', (req, res) => {
 // Direct endpoint called by biometric machines or local edge daemon
 router.post('/punch', async (req, res) => {
   try {
+    // Partner API key is required unless explicitly opened for legacy devices.
     const authHeader = req.headers['x-api-key'] || req.query.apiKey;
-    if (authHeader && authHeader !== config.ANUBHAV_PARTNER_API_KEY) {
+    if (process.env.ALLOW_OPEN_PUNCH !== '1') {
+      if (!authHeader || authHeader !== config.ANUBHAV_PARTNER_API_KEY) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid or missing Partner API Key' });
+      }
+    } else if (authHeader && authHeader !== config.ANUBHAV_PARTNER_API_KEY) {
       return res.status(401).json({ error: 'Unauthorized: Invalid Partner API Key' });
     }
 
@@ -81,8 +88,8 @@ router.post('/punch', async (req, res) => {
   }
 });
 
-// 3. Hardware Simulator Endpoint (Used for presentation & demo)
-router.post('/simulate', async (req, res) => {
+// 3. Hardware Simulator Endpoint (Used for presentation & demo) — admin-only
+router.post('/simulate', requireAuth, accessGuard, requirePerm('DEMO_LAB'), async (req, res) => {
   try {
     const { employeeId, deviceId, punchType = 'IN', verificationMode = 'FACE' } = req.body;
 

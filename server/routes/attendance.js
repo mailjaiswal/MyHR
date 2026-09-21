@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/database');
 const { requireAuth } = require('../middleware/authGuard');
-const { accessGuard, requirePerm, scopeFilter } = require('../middleware/accessGuard');
+const { accessGuard, requirePerm, scopeFilter, assertScope } = require('../middleware/accessGuard');
+const { audit } = require('../services/auditService');
+const { notify } = require('../services/notificationService');
 
 // All attendance endpoints require authentication + access scope
 router.use(requireAuth, accessGuard);
@@ -194,7 +196,7 @@ router.get('/trend', async (req, res) => {
 });
 
 // 5. Regularization of Missed Punches (HR Workflow)
-router.post('/regularize', async (req, res) => {
+router.post('/regularize', requirePerm('REGULARIZATION_APPROVE'), async (req, res) => {
   try {
     const { attendanceId, action = 'APPROVE', notes } = req.body;
 
@@ -206,6 +208,7 @@ router.post('/regularize', async (req, res) => {
     if (!rec) {
       return res.status(404).json({ error: 'Attendance record not found' });
     }
+    if (!assertScope(req, rec.employee_id)) return;
 
     const newStatus = action === 'APPROVE' ? 'REGULARIZED' : rec.status;
     const regStatus = action === 'APPROVE' ? 'APPROVED' : 'REJECTED';
@@ -215,6 +218,20 @@ router.post('/regularize', async (req, res) => {
       SET status = ?, regularization_status = ?, regularization_notes = ?, total_hours = GREATEST(total_hours, 8.0), updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, newStatus, regStatus, notes || 'Regularized by HR Administrator', attendanceId);
+
+    await audit(req, 'attendance.regularize', {
+      entityType: 'attendance', entityId: attendanceId,
+      summary: `Attendance ${regStatus.toLowerCase()} for record ${attendanceId} (employee ${rec.employee_id}, ${rec.duty_date})`,
+      details: { action, notes: notes || null, previous_status: rec.status, new_status: newStatus, duty_date: rec.duty_date }
+    });
+    if (action === 'APPROVE') {
+      await notify('attendance.regularized', {
+        employeeId: rec.employee_id,
+        dutyDate: String(rec.duty_date).slice(0, 10),
+        hours: 'regularized to full day',
+        actorName: req.currentUser?.full_name
+      });
+    }
 
     return res.json({
       success: true,
@@ -231,7 +248,7 @@ router.post('/regularize', async (req, res) => {
 // POST /corrections            submit an override request for a punch entry
 // PUT  /corrections/:id/decide admin approves/rejects the override
 
-router.get('/corrections', async (req, res) => {
+router.get('/corrections', requirePerm('ATTENDANCE_VIEW'), async (req, res) => {
   try {
     const { status } = req.query;
     const empScope = scopeFilter(req.accessCtx, 'e.id');
@@ -255,7 +272,7 @@ router.get('/corrections', async (req, res) => {
   }
 });
 
-router.post('/corrections', async (req, res) => {
+router.post('/corrections', requirePerm('ATTENDANCE_VIEW'), async (req, res) => {
   try {
     const { attendance_id, requested_hours, reason, submitted_by } = req.body;
     if (!attendance_id || !requested_hours) {
@@ -267,6 +284,7 @@ router.post('/corrections', async (req, res) => {
     }
     const rec = await db.get('SELECT * FROM attendance_records WHERE id = ?', attendance_id);
     if (!rec) return res.status(404).json({ error: 'Attendance record not found' });
+    if (!assertScope(req, rec.employee_id)) return;
 
     const existing = await db.get('SELECT id FROM attendance_corrections WHERE attendance_id = ? AND status = ?', attendance_id, 'PENDING');
     if (existing) return res.status(400).json({ error: 'A pending correction already exists for this entry' });
@@ -278,13 +296,25 @@ router.post('/corrections', async (req, res) => {
     `, id, rec.id, rec.employee_id, rec.duty_date, rec.total_hours || 0, hours, reason || null, submitted_by || null);
 
     const created = await db.get('SELECT * FROM attendance_corrections WHERE id = ?', id);
+    await audit(req, 'correction.create', {
+      entityType: 'attendance_correction', entityId: id,
+      summary: `Correction requested for ${rec.employee_id} on ${rec.duty_date}: ${rec.total_hours || 0}h -> ${hours}h`,
+      details: { attendance_id: rec.id, original_hours: rec.total_hours || 0, requested_hours: hours, reason: reason || null }
+    });
+    await notify('correction.requested', {
+      employeeId: rec.employee_id,
+      dutyDate: String(rec.duty_date).slice(0, 10),
+      originalHours: rec.total_hours || 0,
+      requestedHours: hours,
+      reason: reason || null
+    });
     return res.status(201).json({ success: true, message: 'Correction request submitted for admin approval', correction: created });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-router.put('/corrections/:id/decide', async (req, res) => {
+router.put('/corrections/:id/decide', requirePerm('REGULARIZATION_APPROVE'), async (req, res) => {
   try {
     const { id } = req.params;
     const { action, decided_by } = req.body;
@@ -293,6 +323,7 @@ router.put('/corrections/:id/decide', async (req, res) => {
     }
     const cor = await db.get('SELECT * FROM attendance_corrections WHERE id = ?', id);
     if (!cor) return res.status(404).json({ error: 'Correction request not found' });
+    if (!assertScope(req, cor.employee_id)) return;
     if (cor.status !== 'PENDING') return res.status(400).json({ error: `Request already ${cor.status.toLowerCase()}` });
 
     const newStatus = action === 'APPROVE' ? 'APPROVED' : 'REJECTED';
@@ -314,6 +345,18 @@ router.put('/corrections/:id/decide', async (req, res) => {
     `, newStatus, decided_by || 'Admin', id);
 
     const updated = await db.get('SELECT * FROM attendance_corrections WHERE id = ?', id);
+    await audit(req, `correction.${action === 'APPROVE' ? 'approve' : 'reject'}`, {
+      entityType: 'attendance_correction', entityId: id,
+      summary: `Correction for ${cor.employee_id} on ${cor.duty_date} ${newStatus.toLowerCase()}`,
+      details: { decision: newStatus, original_hours: cor.original_hours, requested_hours: cor.requested_hours, reason: cor.reason }
+    });
+    await notify('correction.decided', {
+      employeeId: cor.employee_id,
+      dutyDate: String(cor.duty_date).slice(0, 10),
+      decision: action === 'APPROVE' ? 'APPROVED' : 'REJECTED',
+      decidedByName: req.currentUser?.full_name,
+      note: cor.reason
+    });
     return res.json({ success: true, message: `Correction ${newStatus.toLowerCase()}`, correction: updated });
   } catch (err) {
     return res.status(500).json({ error: err.message });

@@ -55,6 +55,9 @@ app.use('/api/v1/ingestion', require('./routes/ingestion'));
 app.use('/api/v1/leaves', require('./routes/leaves'));
 app.use('/api/v1/access', require('./routes/access'));
 app.use('/api/v1/dashboard', require('./routes/dashboard'));
+app.use('/api/v1/audit', require('./routes/audit'));
+app.use('/api/v1/notifications', require('./routes/notifications'));
+app.use('/api/v1/backup', require('./routes/backup'));
 
 // Serve client production bundle if available
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
@@ -87,6 +90,16 @@ if (!process.env.VERCEL) {
 
       const { startScheduler } = require('./services/syncEngine');
       startScheduler(1);
+
+      // Notification outbox worker (on Vercel this runs via cron endpoints instead).
+      const { flushOutbox, purgeAudit } = require('./services/notificationService');
+      setInterval(() => { flushOutbox().catch(() => {}); }, 60 * 1000).unref();
+      setInterval(() => { purgeAudit().catch(() => {}); }, 24 * 60 * 60 * 1000).unref();
+
+      // Daily off-site backup worker (on Vercel this runs via cron instead).
+      const { runBackup, pruneBackups } = require('./services/backupService');
+      const runDailyBackup = () => { runBackup('AUTO', null).then(() => pruneBackups()).catch(() => {}); };
+      setInterval(runDailyBackup, 24 * 60 * 60 * 1000).unref();
     })
     .catch((e) => {
       console.error('Database migration failed:', e.message);

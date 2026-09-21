@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { db } = require('../db/database');
 const config = require('../config');
+const { notify } = require('./notificationService');
 
 /**
  * Generates an idempotent SHA256 hash for a biometric punch
@@ -139,6 +140,18 @@ async function ingestPunch({ deviceId, biometricUserId, punchTime, verificationM
       INSERT INTO attendance_records (id, duty_date, employee_id, shift_id, first_in_time, last_out_time, total_hours, late_minutes, overtime_hours, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, attendanceId, dutyDate, employee.id, shift.id, firstIn, lastOut, totalHours, lateMinutes, overtimeHours, status);
+  }
+
+  // Notify the employee when overtime is classified (dedup: once per employee/day).
+  if (status === 'OVERTIME' && overtimeHours > 0) {
+    await notify('overtime.logged', {
+      employeeId: employee.id,
+      dutyDate,
+      totalHours,
+      otHours: overtimeHours,
+      status,
+      dedupeKey: `ot|${dutyDate}|${employee.id}`
+    });
   }
 
   return {

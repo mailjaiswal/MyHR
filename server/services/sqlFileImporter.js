@@ -17,6 +17,7 @@ const path = require('path');
 const { db } = require('../db/database');
 const { ingestPunch } = require('./attendanceEngine');
 const { writeSyncLog, finishSyncLog } = require('./syncLogger');
+const { notify } = require('./notificationService');
 
 // node:sqlite is loaded lazily so serverless runtimes (which only use PG now)
 // never need it at boot; it's only required when a vendor SQL file is imported.
@@ -310,6 +311,7 @@ async function ensureEmployee({ biometricUserId, fullName }, createEmployees, co
     VALUES (?, ?, ?, ?, 'Imported Employee', ?, ?, 'Other', ?, 0, 'EMPLOYEE', 'ACTIVE')
   `, id, `IMP-${biometricUserId}`, biometricUserId, name, departmentId, shiftId, new Date().toISOString().slice(0, 10));
   counters.employeesCreated += 1;
+  if (counters.createdNames) counters.createdNames.push(name);
   return db.get('SELECT * FROM employees WHERE id = ?', id);
 }
 
@@ -324,7 +326,7 @@ async function importFile({ buffer, filePath: existingPath, sourceId, sourceName
   const opts = { createEmployees: true, createDevices: true, ...options };
   const startedAt = new Date().toISOString();
   const logId = `sync_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const counters = { recordsFound: 0, recordsImported: 0, recordsSkipped: 0, employeesCreated: 0, devicesCreated: 0, detectedTables: [], errors: [] };
+  const counters = { recordsFound: 0, recordsImported: 0, recordsSkipped: 0, employeesCreated: 0, devicesCreated: 0, createdNames: [], detectedTables: [], errors: [] };
 
   await writeSyncLog({ id: logId, sourceId, sourceName, syncType, startedAt, message: 'Import started' });
 
@@ -421,6 +423,16 @@ async function importFile({ buffer, filePath: existingPath, sourceId, sourceName
       : `Imported ${counters.recordsImported} punches from ${detectRes.punch.table}.`;
 
     await finishSyncLog(logId, status, counters, message);
+
+    // Digest email to HR admins when an import created staff records.
+    if (counters.employeesCreated > 0) {
+      await notify('employee.created', {
+        count: counters.employeesCreated,
+        names: counters.createdNames.slice(0, 12).join(', ') + (counters.createdNames.length > 12 ? ' …' : ''),
+        sourceName,
+        dedupeKey: `emp_created|${logId}`
+      });
+    }
 
     if (sourceId) {
       await db.run(`UPDATE data_sources SET last_sync_at = ?, updated_at = CURRENT_TIMESTAMP, status = 'ACTIVE' WHERE id = ?`, new Date().toISOString(), sourceId);

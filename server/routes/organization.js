@@ -5,6 +5,7 @@ const config = require('../config');
 const { getSettings, updateSettings, SETTINGS_FIELDS } = require('../services/settingsService');
 const { requireAuth } = require('../middleware/authGuard');
 const { accessGuard, requirePerm, scopeFilter } = require('../middleware/accessGuard');
+const { audit, diffFields } = require('../services/auditService');
 
 // 1. Organization & System Meta (public — used for branding/login page)
 router.get('/info', async (req, res) => {
@@ -63,6 +64,11 @@ router.put('/settings', requireAuth, accessGuard, requirePerm('SETTINGS_EDIT'), 
       return res.status(400).json({ error: 'No valid settings fields provided' });
     }
     const settings = await updateSettings(picked);
+    await audit(req, 'settings.company_update', {
+      entityType: 'settings', entityId: 'org_main',
+      summary: `Company settings updated (${Object.keys(picked).join(', ')})`,
+      details: { changed: picked }
+    });
     return res.json({ success: true, message: 'Company settings updated', settings });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -124,6 +130,11 @@ router.put('/shifts/:id', requireAuth, accessGuard, requirePerm('ROSTER_EDIT'), 
     );
 
     const updated = await db.get('SELECT * FROM shifts WHERE id = ?', id);
+    await audit(req, 'shift.update', {
+      entityType: 'shift', entityId: id,
+      summary: `Shift '${updated.name}' updated`,
+      details: { changes: diffFields(existing, updated) }
+    });
     return res.json({
       success: true,
       message: `Shift '${updated.name}' timings updated successfully`,
@@ -147,6 +158,7 @@ router.post('/shifts', requireAuth, accessGuard, requirePerm('ROSTER_EDIT'), asy
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, id, name, start_time, end_time, duration_hours || 8, is_cross_midnight, grace_minutes, break_duration_minutes, color_code);
     const created = await db.get('SELECT * FROM shifts WHERE id = ?', id);
+    await audit(req, 'shift.create', { entityType: 'shift', entityId: id, summary: `Shift '${name}' created (${start_time}-${end_time})`, details: { name, start_time, end_time, duration_hours: created.duration_hours, is_cross_midnight } });
     return res.status(201).json({ success: true, shift: created });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -161,8 +173,8 @@ router.get('/devices/models', (req, res) => {
   });
 });
 
-// 4b. Update Device Model & Settings
-router.put('/devices/:id', async (req, res) => {
+// 4b. Update Device Model & Settings (authenticated admin/partner action)
+router.put('/devices/:id', requireAuth, accessGuard, requirePerm('SETTINGS_EDIT'), async (req, res) => {
   try {
     const { id } = req.params;
     const { model, device_name, location, ip_address, protocol } = req.body;
@@ -190,6 +202,11 @@ router.put('/devices/:id', async (req, res) => {
     );
 
     const updated = await db.get('SELECT * FROM devices WHERE id = ?', id);
+    await audit(req, 'device.update', {
+      entityType: 'device', entityId: id,
+      summary: `Device '${updated.device_name}' updated`,
+      details: { changes: diffFields(dev, updated) }
+    });
     return res.json({
       success: true,
       message: `Device '${updated.device_name}' updated successfully to model ${updated.model}`,
@@ -275,7 +292,7 @@ router.get('/employees/:id', requireAuth, accessGuard, requirePerm('EMPLOYEES_VI
 });
 
 // 7. Update an employee (role, shift assignment, designation, status) - Admin
-router.put('/employees/:id', async (req, res) => {
+router.put('/employees/:id', requireAuth, accessGuard, requirePerm('EMPLOYEES_EDIT'), async (req, res) => {
   try {
     const { id } = req.params;
     const existing = await db.get('SELECT * FROM employees WHERE id = ?', id);
@@ -304,6 +321,10 @@ router.put('/employees/:id', async (req, res) => {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, role ?? null, shift_id ?? null, designation ?? null, department_id ?? null, status ?? null, id);
+    const changed = diffFields(
+      { role: existing.role, shift_id: existing.shift_id, designation: existing.designation, department_id: existing.department_id, status: existing.status },
+      { role: role ?? existing.role, shift_id: shift_id ?? existing.shift_id, designation: designation ?? existing.designation, department_id: department_id ?? existing.department_id, status: status ?? existing.status }
+    );
 
     const updated = await db.get(`
       SELECT e.*, d.name as department_name, s.name as shift_name
@@ -312,6 +333,11 @@ router.put('/employees/:id', async (req, res) => {
       LEFT JOIN shifts s ON e.shift_id = s.id
       WHERE e.id = ?
     `, id);
+    await audit(req, 'employee.update', {
+      entityType: 'employee', entityId: id,
+      summary: `Employee '${updated.full_name}' (${updated.employee_code}) updated`,
+      details: { changes: changed }
+    });
     return res.json({ success: true, message: `Employee '${updated.full_name}' updated`, employee: updated });
   } catch (err) {
     return res.status(500).json({ error: err.message });

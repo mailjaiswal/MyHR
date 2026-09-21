@@ -371,3 +371,85 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_emp_email ON employees (LOWER(email)) WHER
 CREATE INDEX IF NOT EXISTS idx_emp_manager ON employees (manager_id);
 CREATE INDEX IF NOT EXISTS idx_emp_dept ON employees (department_id);
 CREATE INDEX IF NOT EXISTS idx_emp_role_id ON employees (role_id);
+
+-- ============================================================
+-- NOTIFICATIONS & AUDIT: outbox, settings, audit trail
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY,
+  ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor_id TEXT,                       -- employee id of the acting user (null = system/anonymous)
+  actor_name TEXT,
+  actor_role TEXT,
+  action TEXT NOT NULL,                -- e.g. 'leave.approve', 'employee.update'
+  entity_type TEXT,                    -- employee | leave_request | attendance | role | payroll_run | ...
+  entity_id TEXT,
+  summary TEXT,                        -- human-readable one-liner
+  details JSONB DEFAULT '{}',          -- structured diff / payload snapshot
+  ip TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_logs (ts);
+CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs (action, ts);
+CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs (actor_id, ts);
+CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs (entity_type, entity_id);
+
+CREATE TABLE IF NOT EXISTS email_outbox (
+  id TEXT PRIMARY KEY,
+  event TEXT NOT NULL,                 -- catalog key, e.g. 'leave.requested'
+  dedup_key TEXT,                      -- optional: one queued email per (event, dedup_key)
+  to_email TEXT NOT NULL,
+  to_name TEXT,
+  subject TEXT NOT NULL,
+  html TEXT,
+  text TEXT,
+  status TEXT NOT NULL DEFAULT 'PENDING',  -- PENDING | SENT | FAILED
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  sent_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_outbox_status ON email_outbox (status, created_at);
+
+CREATE TABLE IF NOT EXISTS notification_settings (
+  id TEXT PRIMARY KEY DEFAULT 'main',
+  smtp_host TEXT,
+  smtp_port INTEGER,
+  smtp_user TEXT,
+  smtp_password TEXT,
+  smtp_from TEXT,
+  smtp_secure INTEGER DEFAULT 1,
+  email_enabled INTEGER DEFAULT 1,
+  event_prefs JSONB DEFAULT '{}',       -- { 'leave.requested': false, ... } admin overrides
+  audit_retention_days INTEGER DEFAULT 365,
+  backup_enabled INTEGER DEFAULT 1,
+  backup_retention_count INTEGER DEFAULT 14,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+INSERT INTO notification_settings (id) VALUES ('main') ON CONFLICT (id) DO NOTHING;
+
+-- Idempotent column adds for databases created before the backup feature.
+ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS backup_enabled INTEGER DEFAULT 1;
+ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS backup_retention_count INTEGER DEFAULT 14;
+
+-- Daily off-site backups (logical SQL dumps pushed to Supabase Storage).
+CREATE TABLE IF NOT EXISTS backups (
+  id TEXT PRIMARY KEY,
+  ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+  kind TEXT NOT NULL DEFAULT 'AUTO',          -- AUTO | MANUAL
+  status TEXT NOT NULL DEFAULT 'PENDING',     -- SUCCESS | FAILED
+  storage_path TEXT,                          -- object key inside the bucket
+  bucket TEXT,
+  size_bytes BIGINT DEFAULT 0,
+  table_counts JSONB DEFAULT '{}',            -- { 'employees': 42, ... }
+  error TEXT,
+  created_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_backups_ts ON backups (ts DESC);
+CREATE INDEX IF NOT EXISTS idx_backups_status ON backups (status, ts DESC);
+
+-- Grant the new audit permission to org-wide admin roles (guarded, idempotent).
+UPDATE roles
+SET permissions = permissions || '["AUDIT_VIEW"]'::jsonb
+WHERE data_scope = 'ALL'
+  AND NOT permissions @> '"AUDIT_VIEW"'::jsonb;

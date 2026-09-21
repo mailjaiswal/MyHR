@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Building2, Save, Loader2, Settings2, Hourglass, Cpu, Pencil, X, Check, Plus,
-  CalendarClock, ShieldCheck, Users, ChevronRight, Layers, KeyRound, Trash2, Network
+  CalendarClock, ShieldCheck, Users, ChevronRight, Layers, KeyRound, Trash2, Network,
+  Bell, Mail, Send, Inbox,
+  DatabaseBackup, Play, Download, RotateCcw
 } from 'lucide-react';
 import { useOrganization } from '../context/OrganizationContext';
 import { useAuth } from '../context/AuthContext';
@@ -13,7 +15,7 @@ const ALL_PERMS = [
   'DASHBOARD_VIEW', 'ATTENDANCE_VIEW', 'ATTENDANCE_EDIT', 'REGULARIZATION_APPROVE',
   'PAYROLL_VIEW', 'PAYROLL_MANAGE', 'EMPLOYEES_VIEW', 'EMPLOYEES_EDIT',
   'LEAVES_VIEW', 'LEAVES_REQUEST', 'LEAVES_APPROVE', 'ROSTER_VIEW', 'ROSTER_EDIT',
-  'SETTINGS_VIEW', 'SETTINGS_EDIT', 'ACCESS_MANAGE', 'EXPORTS', 'DEMO_LAB'
+  'SETTINGS_VIEW', 'SETTINGS_EDIT', 'ACCESS_MANAGE', 'EXPORTS', 'DEMO_LAB', 'AUDIT_VIEW'
 ];
 
 const TABS = [
@@ -21,7 +23,9 @@ const TABS = [
   { key: 'roster', label: 'Shift Roster', icon: Hourglass },
   { key: 'roles', label: 'Roles', icon: ShieldCheck },
   { key: 'leaves', label: 'Leave Policy', icon: CalendarClock },
-  { key: 'access', label: 'Access Management', icon: Network, perm: 'ACCESS_MANAGE' }
+  { key: 'access', label: 'Access Management', icon: Network, perm: 'ACCESS_MANAGE' },
+  { key: 'notifications', label: 'Notifications & Audit', icon: Bell, perm: 'SETTINGS_VIEW' },
+  { key: 'backup', label: 'Backup & Recovery', icon: DatabaseBackup, perm: 'SETTINGS_VIEW' }
 ];
 
 export default function Settings() {
@@ -271,6 +275,137 @@ export default function Settings() {
     });
     if (d.success) setResetResult(d); else alert(d.error || 'Failed');
   };
+
+  // ── Notifications & Audit tab ──
+  const canEditNotif = hasPerm('SETTINGS_EDIT');
+  const [notif, setNotif] = useState(null); // { smtp:{host,port,user,password,from,secure}, email_enabled, event_prefs, events, smtp_from_env }
+  const [outbox, setOutbox] = useState([]);
+  const [outboxCounts, setOutboxCounts] = useState({ pending: 0, sent: 0, failed: 0 });
+  const [outboxFilter, setOutboxFilter] = useState('');
+  const [retention, setRetention] = useState(365);
+  const [testTo, setTestTo] = useState('');
+  const [notifBusy, setNotifBusy] = useState(null);
+
+  const loadNotif = useCallback(async () => {
+    const d = await api('/api/v1/notifications/settings');
+    if (d.success) setNotif({ smtp: d.smtp, email_enabled: d.email_enabled, event_prefs: d.event_prefs || {}, events: d.events || [], smtp_from_env: d.smtp_from_env });
+    api('/api/v1/audit/settings').then(a => a.success && setRetention(a.audit_retention_days));
+  }, [api]);
+
+  const loadOutbox = useCallback(async (status = '') => {
+    const d = await api(`/api/v1/notifications/outbox?limit=50${status ? `&status=${status}` : ''}`);
+    if (d.success) { setOutbox(d.entries); setOutboxCounts(d.counts); }
+  }, [api]);
+
+  useEffect(() => { if (tab === 'notifications' && hasPerm('SETTINGS_VIEW')) { loadNotif(); loadOutbox(outboxFilter); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tab]);
+
+  const toggleEvent = (ev) => setNotif(n => n ? { ...n, event_prefs: { ...n.event_prefs, [ev]: !(n.event_prefs[ev] !== false) } } : n);
+
+  const saveNotif = async () => {
+    setNotifBusy('save');
+    try {
+      const d = await api('/api/v1/notifications/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ smtp: notif.smtp, email_enabled: notif.email_enabled, event_prefs: notif.event_prefs })
+      });
+      if (d.success) flash('Notification settings saved'); else alert(d.error || 'Failed to save');
+    } catch (err) { alert(err.message); } finally { setNotifBusy(null); }
+  };
+
+  const sendTest = async () => {
+    if (!testTo) { alert('Enter a recipient address'); return; }
+    setNotifBusy('test');
+    try {
+      const d = await api('/api/v1/notifications/test', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: testTo })
+      });
+      if (d.success) { flash(d.message || 'Test email sent'); loadOutbox(outboxFilter); } else alert(d.message || d.error || 'Send failed');
+    } catch (err) { alert(err.message); } finally { setNotifBusy(null); }
+  };
+
+  const flushNow = async () => {
+    setNotifBusy('flush');
+    try {
+      const d = await api('/api/v1/notifications/flush-now', { method: 'POST' });
+      if (d.success) { flash(`Flushed: ${d.sent} sent, ${d.failed} failed, ${d.pending} pending`); loadOutbox(outboxFilter); } else alert(d.error || 'Flush failed');
+    } catch (err) { alert(err.message); } finally { setNotifBusy(null); }
+  };
+
+  const saveRetention = async () => {
+    setNotifBusy('retention');
+    try {
+      const d = await api('/api/v1/audit/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audit_retention_days: Number(retention) })
+      });
+      if (d.success) { setRetention(d.audit_retention_days); flash(`Audit retention set to ${d.audit_retention_days} days`); } else alert(d.error || 'Failed');
+    } catch (err) { alert(err.message); } finally { setNotifBusy(null); }
+  };
+
+  const OUTBOX_PILL = { SENT: 'status-ok', FAILED: 'status-bad', PENDING: 'status-warn' };
+
+  // ── Backup & Recovery tab ──
+  const [backup, setBackup] = useState(null); // { backup_enabled, backup_retention_count, bucket, configured }
+  const [backups, setBackups] = useState([]);
+  const [backupCounts, setBackupCounts] = useState({ ok: 0, failed: 0 });
+  const [backupBusy, setBackupBusy] = useState(null);
+  const [restoreTarget, setRestoreTarget] = useState(null); // { id, confirm }
+
+  const loadBackup = useCallback(async () => {
+    const s = await api('/api/v1/backup/settings');
+    if (s.success) setBackup(s);
+    const l = await api('/api/v1/backup');
+    if (l.success) { setBackups(l.entries); setBackupCounts(l.counts); }
+  }, [api]);
+  useEffect(() => { if (tab === 'backup' && hasPerm('SETTINGS_VIEW')) loadBackup(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tab]);
+
+  const saveBackupSettings = async () => {
+    setBackupBusy('save');
+    try {
+      const d = await api('/api/v1/backup/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backup_enabled: backup.backup_enabled, backup_retention_count: Number(backup.backup_retention_count) })
+      });
+      if (d.success) { flash('Backup settings saved'); loadBackup(); } else alert(d.error || d.message || 'Failed to save');
+    } catch (err) { alert(err.message); } finally { setBackupBusy(null); }
+  };
+
+  const runBackupNow = async () => {
+    setBackupBusy('run');
+    try {
+      const d = await api('/api/v1/backup/run-manual', { method: 'POST' });
+      if (d.success) { flash('Backup completed'); loadBackup(); }
+      else { alert(d.backup?.error || d.message || 'Backup failed'); loadBackup(); }
+    } catch (err) { alert(err.message); } finally { setBackupBusy(null); }
+  };
+
+  const downloadBackup = async (id) => {
+    setBackupBusy('dl' + id);
+    try {
+      const res = await authFetch(`/api/v1/backup/${id}/download`);
+      if (!res.ok) { alert('Download failed'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `myhr_backup_${id}.sql`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) { alert(err.message); } finally { setBackupBusy(null); }
+  };
+
+  const doRestore = async () => {
+    if (!restoreTarget) return;
+    setBackupBusy('restore');
+    try {
+      const d = await api(`/api/v1/backup/${restoreTarget.id}/restore`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: restoreTarget.id })
+      });
+      if (d.success) { flash('Database restored from backup'); setRestoreTarget(null); loadBackup(); }
+      else alert(d.message || d.error || 'Restore failed');
+    } catch (err) { alert(err.message); } finally { setBackupBusy(null); }
+  };
+
+  const fmtBytes = (n) => { n = Number(n) || 0; return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB'; };
+  const BACKUP_PILL = { SUCCESS: 'status-ok', FAILED: 'status-bad', PENDING: 'status-warn' };
 
   return (
     <div className="page">
@@ -742,6 +877,222 @@ export default function Settings() {
               </table>
             </div>
           </section>
+        </div>
+      )}
+
+      {/* ── Tab: Notifications & Audit ── */}
+      {tab === 'notifications' && hasPerm('SETTINGS_VIEW') && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {!notif ? <div className="loading-state"><Loader2 size={22} className="spin" /></div> : (
+            <>
+              {notif.smtp_from_env && (
+                <div className="demo-banner" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-surface-subtle)', color: 'var(--text-muted)' }}>
+                  <Mail size={16} />
+                  <span>SMTP is overridden by environment variables (<strong>SMTP_HOST</strong> etc.) on the server, so the fields below are saved but may not take effect until those secrets are removed.</span>
+                </div>
+              )}
+
+              <section className="section-card">
+                <div className="section-head">
+                  <span className="section-title"><Mail size={16} /> Email notifications</span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600, cursor: canEditNotif ? 'pointer' : 'default' }}>
+                    <input type="checkbox" disabled={!canEditNotif} checked={!!notif.email_enabled} onChange={e => setNotif({ ...notif, email_enabled: e.target.checked })} /> Enabled
+                  </label>
+                </div>
+                <div className="section-body" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.875rem' }}>
+                  <div className="field"><label className="field-label">SMTP host</label><input className="input" disabled={!canEditNotif} value={notif.smtp.host || ''} onChange={e => setNotif({ ...notif, smtp: { ...notif.smtp, host: e.target.value } })} /></div>
+                  <div className="field"><label className="field-label">Port</label><input className="input" type="number" disabled={!canEditNotif} value={notif.smtp.port ?? ''} onChange={e => setNotif({ ...notif, smtp: { ...notif.smtp, port: e.target.value } })} /></div>
+                  <div className="field"><label className="field-label">Username</label><input className="input" disabled={!canEditNotif} value={notif.smtp.user || ''} onChange={e => setNotif({ ...notif, smtp: { ...notif.smtp, user: e.target.value } })} /></div>
+                  <div className="field"><label className="field-label">Password</label><input className="input" type="password" disabled={!canEditNotif} placeholder={notif.smtp.password ? '••••••••' : 'not set'} value={notif.smtp.password || ''} onChange={e => setNotif({ ...notif, smtp: { ...notif.smtp, password: e.target.value } })} /></div>
+                  <div className="field"><label className="field-label">From address</label><input className="input" disabled={!canEditNotif} placeholder="hr@company.com" value={notif.smtp.from || ''} onChange={e => setNotif({ ...notif, smtp: { ...notif.smtp, from: e.target.value } })} /></div>
+                  <div className="field"><label className="field-label">Connection</label>
+                    <select className="input" disabled={!canEditNotif} value={notif.smtp.secure ? 'true' : 'false'} onChange={e => setNotif({ ...notif, smtp: { ...notif.smtp, secure: e.target.value === 'true' } })}>
+                      <option value="true">TLS (secure / 465)</option>
+                      <option value="false">STARTTLS (587 / non-secure)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="section-body" style={{ borderTop: '1px solid var(--border-color)', marginTop: '0.5rem', paddingTop: '0.875rem' }}>
+                  <div className="field-label" style={{ marginBottom: '0.5rem' }}>Notify on these events</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1.1rem' }}>
+                    {notif.events.map(ev => {
+                      const on = notif.event_prefs[ev] !== false;
+                      return (
+                        <label key={ev} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.7188rem', color: 'var(--text-body)', cursor: canEditNotif ? 'pointer' : 'default' }}>
+                          <input type="checkbox" disabled={!canEditNotif} checked={on} onChange={() => toggleEvent(ev)} />
+                          <span className="mono">{ev}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {canEditNotif && (
+                  <div className="section-body" style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap', alignItems: 'center', borderTop: '1px solid var(--border-color)', marginTop: '0.5rem', paddingTop: '0.875rem' }}>
+                    <button className="btn btn-primary btn-sm" onClick={saveNotif} disabled={notifBusy === 'save'}>
+                      {notifBusy === 'save' ? <Loader2 size={14} className="spin" /> : <Save size={14} />} Save settings
+                    </button>
+                    <span style={{ width: 12 }} />
+                    <input className="input" style={{ width: 220 }} type="email" placeholder="Send test email to…" value={testTo} onChange={e => setTestTo(e.target.value)} />
+                    <button className="btn btn-ghost btn-sm" onClick={sendTest} disabled={notifBusy === 'test'}>
+                      {notifBusy === 'test' ? <Loader2 size={14} className="spin" /> : <Send size={14} />} Test email
+                    </button>
+                  </div>
+                )}
+              </section>
+
+              <section className="section-card">
+                <div className="section-head">
+                  <span className="section-title"><ShieldCheck size={16} /> Audit retention</span>
+                </div>
+                <div className="section-body" style={{ display: 'flex', gap: '0.625rem', alignItems: 'end', flexWrap: 'wrap' }}>
+                  <div className="field" style={{ width: 180 }}>
+                    <label className="field-label">Keep entries for (days)</label>
+                    <input className="input" type="number" min="1" max="3650" disabled={!canEditNotif} value={retention} onChange={e => setRetention(e.target.value)} />
+                  </div>
+                  {canEditNotif && (
+                    <button className="btn btn-ghost btn-sm" onClick={saveRetention} disabled={notifBusy === 'retention'}>
+                      {notifBusy === 'retention' ? <Loader2 size={14} className="spin" /> : <Check size={14} />} Save
+                    </button>
+                  )}
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-caption)' }}>Default is 365 days (1 year). Older audit entries are purged automatically.</span>
+                </div>
+              </section>
+            </>
+          )}
+
+          <section className="section-card">
+            <div className="section-head">
+              <span className="section-title"><Inbox size={16} /> Notification log</span>
+              <div className="section-action" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-caption)' }}>
+                  {outboxCounts.pending} pending · {outboxCounts.sent} sent · {outboxCounts.failed} failed
+                </span>
+                <select className="input" style={{ width: 130, padding: '0.3rem 0.5rem' }} value={outboxFilter} onChange={e => { setOutboxFilter(e.target.value); loadOutbox(e.target.value); }}>
+                  <option value="">All</option><option value="PENDING">Pending</option><option value="SENT">Sent</option><option value="FAILED">Failed</option>
+                </select>
+                {canEditNotif && <button className="btn btn-ghost btn-sm" onClick={flushNow} disabled={notifBusy === 'flush'}>{notifBusy === 'flush' ? <Loader2 size={13} className="spin" /> : <Send size={13} />} Flush</button>}
+              </div>
+            </div>
+            <div className="table-wrap">
+              <table className="swaniki-table">
+                <thead><tr><th>When</th><th>Event</th><th>To</th><th>Subject</th><th>Status</th></tr></thead>
+                <tbody>
+                  {outbox.map(o => (
+                    <tr key={o.id}>
+                      <td className="mono" style={{ whiteSpace: 'nowrap', fontSize: '0.72rem' }}>{o.sent_at ? new Date(o.sent_at).toLocaleString() : new Date(o.created_at).toLocaleString()}</td>
+                      <td><span className="mono" style={{ fontSize: '0.72rem' }}>{o.event}</span></td>
+                      <td>
+                        <div style={{ fontSize: '0.78rem' }}>{o.to_name || o.to_email}</div>
+                        <div className="mono" style={{ fontSize: '0.66rem', color: 'var(--text-caption)' }}>{o.to_email}</div>
+                      </td>
+                      <td style={{ maxWidth: 280 }}>{o.subject}</td>
+                      <td>
+                        <span className={`status-pill ${OUTBOX_PILL[o.status] || 'status-muted'}`} title={o.last_error || ''}>{o.status}{o.attempts > 1 ? ` ×${o.attempts}` : ''}</span>
+                      </td>
+                    </tr>
+                  ))}
+                  {outbox.length === 0 && <tr><td colSpan={5}><div className="empty-state"><p>No emails queued or sent yet.</p></div></td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* ── Tab: Backup & Recovery ── */}
+      {tab === 'backup' && hasPerm('SETTINGS_VIEW') && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {!backup ? <div className="loading-state"><Loader2 size={22} className="spin" /></div> : (
+            <>
+              {!backup.configured && (
+                <div className="demo-banner" style={{ borderColor: 'rgba(245,158,11,.4)', background: 'var(--brand-amber-light)', color: '#b45309' }}>
+                  <DatabaseBackup size={16} />
+                  <span>Backups are not wired to storage yet. Set <strong>SUPABASE_URL</strong> and <strong>SUPABASE_SERVICE_ROLE_KEY</strong> (and create a private <strong>{backup.bucket}</strong> bucket) on the server to enable off-site dumps.</span>
+                </div>
+              )}
+
+              <section className="section-card">
+                <div className="section-head">
+                  <span className="section-title"><DatabaseBackup size={16} /> Backup settings</span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600, cursor: canEditNotif ? 'pointer' : 'default' }}>
+                    <input type="checkbox" disabled={!canEditNotif} checked={!!backup.backup_enabled} onChange={e => setBackup({ ...backup, backup_enabled: e.target.checked })} /> Daily backups enabled
+                  </label>
+                </div>
+                <div className="section-body" style={{ display: 'flex', gap: '0.625rem', alignItems: 'end', flexWrap: 'wrap' }}>
+                  <div className="field" style={{ width: 200 }}>
+                    <label className="field-label">Keep last N backups</label>
+                    <input className="input" type="number" min="1" max="365" disabled={!canEditNotif} value={backup.backup_retention_count ?? 14} onChange={e => setBackup({ ...backup, backup_retention_count: e.target.value })} />
+                  </div>
+                  {canEditNotif && (
+                    <>
+                      <button className="btn btn-primary btn-sm" onClick={saveBackupSettings} disabled={backupBusy === 'save'}>
+                        {backupBusy === 'save' ? <Loader2 size={14} className="spin" /> : <Save size={14} />} Save
+                      </button>
+                      <button className="btn btn-ghost btn-sm" onClick={runBackupNow} disabled={backupBusy === 'run'}>
+                        {backupBusy === 'run' ? <Loader2 size={14} className="spin" /> : <Play size={14} />} Run backup now
+                      </button>
+                    </>
+                  )}
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-caption)' }}>Bucket: <span className="mono">{backup.bucket}</span> · {backupCounts.ok} stored · {backupCounts.failed} failed</span>
+                </div>
+              </section>
+
+              <section className="section-card">
+                <div className="section-head">
+                  <span className="section-title"><Inbox size={16} /> Recent backups</span>
+                </div>
+                <div className="table-wrap">
+                  <table className="swaniki-table">
+                    <thead><tr><th>When</th><th>Kind</th><th>Status</th><th>Size</th><th>Tables</th><th style={{ textAlign: 'right' }}>Actions</th></tr></thead>
+                    <tbody>
+                      {backups.map(b => (
+                        <tr key={b.id}>
+                          <td className="mono" style={{ whiteSpace: 'nowrap', fontSize: '0.72rem' }}>{new Date(b.ts).toLocaleString()}</td>
+                          <td><span className="status-pill status-muted" style={{ textTransform: 'none' }}>{b.kind}</span></td>
+                          <td><span className={`status-pill ${BACKUP_PILL[b.status] || 'status-muted'}`} title={b.error || ''}>{b.status}</span></td>
+                          <td className="mono">{b.status === 'SUCCESS' ? fmtBytes(b.size_bytes) : '—'}</td>
+                          <td className="mono" style={{ fontSize: '0.72rem' }}>{b.status === 'SUCCESS' ? `${Object.keys(b.table_counts || {}).length}` : '—'}</td>
+                          <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            {b.status === 'SUCCESS' && canEditNotif && (
+                              <>
+                                <button className="btn btn-ghost btn-sm" onClick={() => downloadBackup(b.id)} disabled={backupBusy === 'dl' + b.id}>
+                                  {backupBusy === 'dl' + b.id ? <Loader2 size={13} className="spin" /> : <Download size={13} />}
+                                </button>{' '}
+                                <button className="btn btn-ghost btn-sm" onClick={() => setRestoreTarget({ id: b.id, confirm: '' })}>
+                                  <RotateCcw size={13} /> Restore
+                                </button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {backups.length === 0 && <tr><td colSpan={6}><div className="empty-state"><p>No backups yet. Run one now or wait for the daily job.</p></div></td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Restore confirmation modal */}
+      {restoreTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }} onClick={() => setRestoreTarget(null)}>
+          <div className="section-card" style={{ width: 'min(480px, 100%)', padding: '1.25rem' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1rem', color: 'var(--brand-rose)' }}>Restore this backup?</h3>
+            <p style={{ fontSize: '0.82rem', marginBottom: '0.75rem' }}>This overwrites <strong>all current data</strong> (employees, attendance, payroll, leaves, audit) with the selected backup. This cannot be undone. Type the backup id below to confirm:</p>
+            <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-caption)', marginBottom: '0.4rem', wordBreak: 'break-all' }}>{restoreTarget.id}</div>
+            <input className="input" style={{ marginBottom: '0.75rem' }} placeholder="paste backup id to confirm" value={restoreTarget.confirm} onChange={e => setRestoreTarget({ ...restoreTarget, confirm: e.target.value })} />
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setRestoreTarget(null)}>Cancel</button>
+              <button className="btn btn-rose btn-sm" disabled={restoreTarget.confirm !== restoreTarget.id || backupBusy === 'restore'} onClick={doRestore}>
+                {backupBusy === 'restore' ? <Loader2 size={14} className="spin" /> : <RotateCcw size={14} />} Restore now
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

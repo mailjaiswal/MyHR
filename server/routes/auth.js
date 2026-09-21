@@ -10,6 +10,8 @@ const {
 } = require('../services/authService');
 const { requireAuth } = require('../middleware/authGuard');
 const { accessGuard, requirePerm } = require('../middleware/accessGuard');
+const { audit, auditSystem } = require('../services/auditService');
+const { notify } = require('../services/notificationService');
 
 const LOCK_THRESHOLD = 5;
 const LOCK_DURATION_MS = 30 * 60 * 1000; // 30 minutes
@@ -59,6 +61,16 @@ router.post('/login', loginLimiter, async (req, res) => {
       if (attempts >= LOCK_THRESHOLD) {
         updates.locked_until = new Date(Date.now() + LOCK_DURATION_MS);
         updates.failed_attempts = 0;
+        // Security events worth a durable trail + HR admin alert.
+        const fwd = req.headers['x-forwarded-for'];
+        const ip = (fwd ? String(fwd).split(',')[0].trim() : req.connection?.remoteAddress) || null;
+        await auditSystem({
+          actorId: user.id, actorName: user.full_name || user.email, actorRole: user.role,
+          action: 'auth.lockout', entityType: 'employee', entityId: user.id,
+          summary: `Account locked for 30 min after ${attempts} failed login attempts`,
+          details: { email: user.email, ip, attempts }, ip
+        });
+        await notify('auth.lockout', { email: user.email, ip, attempts });
       }
       await db.run(`UPDATE employees SET failed_attempts = ?, locked_until = ? WHERE id = ?`,
         updates.failed_attempts, updates.locked_until || null, user.id);
@@ -185,6 +197,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
     await db.run(`UPDATE employees SET password_hash = ?, must_change_password = 0, failed_attempts = 0, locked_until = NULL WHERE id = ?`,
       newHash, user.id);
 
+    await audit(req, 'auth.password_change_self', { entityType: 'employee', entityId: user.id, summary: 'Password changed (self-service)' });
     return res.json({ success: true, message: 'Password changed successfully' });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -209,6 +222,8 @@ router.patch('/reset-password', requireAuth, accessGuard, requirePerm('ACCESS_MA
     await db.run(`UPDATE employees SET password_hash = ?, must_change_password = 1, failed_attempts = 0, locked_until = NULL WHERE id = ?`,
       hash, employee_id);
 
+    await audit(req, 'auth.password_reset_admin', { entityType: 'employee', entityId: employee_id, summary: `Password reset by admin for '${target.full_name}' (${target.email})` });
+    await notify('password.admin_reset', { employeeId: employee_id, actorName: req.currentUser?.full_name });
     return res.json({
       success: true,
       message: `Password reset for ${target.full_name}. Share this temp password:`,

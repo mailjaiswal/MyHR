@@ -7,9 +7,10 @@ const loader = require('../services/sqlTextDumpLoader');
 const syncEngine = require('../services/syncEngine');
 const { requireAuth } = require('../middleware/authGuard');
 const { accessGuard, requirePerm } = require('../middleware/accessGuard');
+const { audit, diffFields } = require('../services/auditService');
 
-// Data Sources / Demo Lab is an admin-only surface (DEMO_LAB permission)
-router.use(requireAuth, accessGuard, requirePerm('DEMO_LAB'));
+// Data Sources management is an admin surface (SETTINGS_VIEW to read, SETTINGS_EDIT to mutate)
+router.use(requireAuth, accessGuard, requirePerm('SETTINGS_VIEW'));
 
 function makeId(prefix) {
   return `${prefix}_${Date.now()}${crypto.randomBytes(3).toString('hex')}`;
@@ -33,7 +34,7 @@ router.get('/sources', async (req, res) => {
 });
 
 // ── 2. Create a data source ────────────────────────────────────────────
-router.post('/sources', async (req, res) => {
+router.post('/sources', requirePerm('SETTINGS_EDIT'), async (req, res) => {
   try {
     const {
       name, source_type = 'API', vendor = 'ZKTeco', base_url, username,
@@ -61,6 +62,11 @@ router.post('/sources', async (req, res) => {
     );
 
     const created = await db.get('SELECT * FROM data_sources WHERE id = ?', id);
+    await audit(req, 'ingestion.source_create', {
+      entityType: 'data_source', entityId: id,
+      summary: `Data source '${name}' (${source_type}) created`,
+      details: { name, source_type, vendor, base_url: base_url || null, sync_frequency_minutes }
+    });
     return res.status(201).json({ success: true, source: { ...created, password_enc: '••••••••' } });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -68,7 +74,7 @@ router.post('/sources', async (req, res) => {
 });
 
 // ── 3. Update a data source ────────────────────────────────────────────
-router.put('/sources/:id', async (req, res) => {
+router.put('/sources/:id', requirePerm('SETTINGS_EDIT'), async (req, res) => {
   try {
     const { id } = req.params;
     const existing = await db.get('SELECT * FROM data_sources WHERE id = ?', id);
@@ -106,6 +112,17 @@ router.put('/sources/:id', async (req, res) => {
     );
 
     const updated = await db.get('SELECT * FROM data_sources WHERE id = ?', id);
+    await audit(req, 'ingestion.source_update', {
+      entityType: 'data_source', entityId: id,
+      summary: `Data source '${updated.name}' updated${password ? ' (credentials rotated)' : ''}`,
+      details: {
+        changes: diffFields(
+          { name: existing.name, vendor: existing.vendor, base_url: existing.base_url, username: existing.username, token_type: existing.token_type, sync_frequency_minutes: existing.sync_frequency_minutes, status: existing.status },
+          { name: updated.name, vendor: updated.vendor, base_url: updated.base_url, username: updated.username, token_type: updated.token_type, sync_frequency_minutes: updated.sync_frequency_minutes, status: updated.status }
+        ),
+        password_changed: Boolean(password)
+      }
+    });
     return res.json({ success: true, source: { ...updated, password_enc: '••••••••' } });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -113,12 +130,14 @@ router.put('/sources/:id', async (req, res) => {
 });
 
 // ── 4. Delete a data source ────────────────────────────────────────────
-router.delete('/sources/:id', async (req, res) => {
+router.delete('/sources/:id', requirePerm('SETTINGS_EDIT'), async (req, res) => {
   try {
     const { id } = req.params;
+    const existing = await db.get('SELECT * FROM data_sources WHERE id = ?', id);
     await db.run(`DELETE FROM sync_logs WHERE source_id = ?`, id);
     const info = await db.run(`DELETE FROM data_sources WHERE id = ?`, id);
     if (info.changes === 0) return res.status(404).json({ error: 'Data source not found' });
+    await audit(req, 'ingestion.source_delete', { entityType: 'data_source', entityId: id, summary: `Data source '${existing.name}' deleted`, details: { name: existing.name, source_type: existing.source_type } });
     return res.json({ success: true, message: 'Data source deleted' });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -126,7 +145,7 @@ router.delete('/sources/:id', async (req, res) => {
 });
 
 // ── 5. Test an API source connection ───────────────────────────────────
-router.post('/sources/:id/test', async (req, res) => {
+router.post('/sources/:id/test', requirePerm('SETTINGS_EDIT'), async (req, res) => {
   try {
     const { id } = req.params;
     const source = await db.get('SELECT * FROM data_sources WHERE id = ?', id);
@@ -146,10 +165,11 @@ router.post('/sources/:id/test', async (req, res) => {
 });
 
 // ── 6. Manual sync trigger (API sources) ───────────────────────────────
-router.post('/sources/:id/sync', async (req, res) => {
+router.post('/sources/:id/sync', requirePerm('SETTINGS_EDIT'), async (req, res) => {
   try {
     const { id } = req.params;
     const result = await syncEngine.syncSourceById(id, true);
+    await audit(req, 'ingestion.sync_manual', { entityType: 'data_source', entityId: id, summary: `Manual sync triggered on source '${id}': ${result.recordsImported ?? 0} imported, ${result.employeesCreated ?? 0} employees created`, details: { recordsFound: result.recordsFound, recordsImported: result.recordsImported, employeesCreated: result.employeesCreated, status: result.status } });
     return res.json({ success: true, ...result });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -160,7 +180,7 @@ router.post('/sources/:id/sync', async (req, res) => {
 // Accepts a SQLite (.db) binary OR a MySQL/SQL Server text dump as the raw body.
 // Optional headers: X-Source-Id (link to a data_sources row), X-Source-Name,
 // X-Vendor, X-Options (JSON: { createEmployees, columnMap, ... }).
-router.post('/upload', (req, res) => {
+router.post('/upload', requirePerm('SETTINGS_EDIT'), (req, res) => {
   const chunks = [];
   req.on('data', c => chunks.push(c));
   req.on('error', e => res.status(400).json({ error: e.message }));
@@ -181,6 +201,11 @@ router.post('/upload', (req, res) => {
     try {
       const summary = await importer.importFile({ buffer: raw, sourceId, sourceName, syncType: 'FILE_IMPORT', options });
       const logRow = await db.get(`SELECT * FROM sync_logs WHERE sync_type = 'FILE_IMPORT' ORDER BY started_at DESC LIMIT 1`);
+      await audit(req, 'ingestion.file_import', {
+        entityType: 'data_source', entityId: sourceId || 'upload',
+        summary: `SQL file import ('${sourceName}'): ${summary.recordsImported ?? 0} punches, ${summary.employeesCreated ?? 0} employees created`,
+        details: { sourceName, recordsFound: summary.recordsFound, recordsImported: summary.recordsImported, employeesCreated: summary.employeesCreated, detectedTables: summary.detectedTables }
+      });
       return res.json({ success: true, detectedTables: summary.detectedTables, import: summary, syncLog: logRow });
     } catch (err) {
       return res.status(400).json({ success: false, error: err.message });

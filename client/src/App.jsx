@@ -17,6 +17,7 @@ import Employees from './pages/Employees';
 import Leaves from './pages/Leaves';
 import ShiftRoster from './pages/ShiftRoster';
 import Regularization from './pages/Regularization';
+import AuditLog from './pages/AuditLog';
 import Settings from './pages/Settings';
 import DemoLab from './pages/DemoLab';
 
@@ -72,6 +73,7 @@ function AppContent() {
       case 'leaves': return <Leaves />;
       case 'shift_roster': return <div className="page"><ShiftRoster /></div>;
       case 'regularization': return <Regularization />;
+      case 'audit': return <AuditLog />;
       case 'settings': return <Settings />;
       case 'demo': return <DemoLab demoKey={demoKey} />;
       default: return <Dashboard onNavigate={setActiveTab} />;

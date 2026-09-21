@@ -94,6 +94,18 @@ function requirePerm(permKey) {
   };
 }
 
+// Helper: assert an employee id is within the caller's visible scope.
+// No-op for ALL-scope roles (visibleEmployeeIds === null). Returns true when
+// allowed; otherwise writes a 403 and returns false so the caller can bail.
+function assertScope(req, employeeId) {
+  const ctx = req.accessCtx;
+  if (!ctx) { req.res.status(401).json({ error: 'UNAUTHORIZED' }); return false; }
+  if (ctx.visibleEmployeeIds === null) return true; // ALL scope
+  if (employeeId && ctx.visibleEmployeeIds.includes(employeeId)) return true;
+  req.res.status(403).json({ error: 'FORBIDDEN', message: 'Record is outside your access scope' });
+  return false;
+}
+
 // Helper: build SQL WHERE fragment to scope results to visible employees
 // Returns { clause: 'AND e.id = ANY($1)', params: [[ids]] } or empty if ALL
 function scopeFilter(accessCtx, colName = 'e.id') {
@@ -109,4 +121,4 @@ function scopeFilter(accessCtx, colName = 'e.id') {
   return { clause: `AND ${colName} IN (${placeholders})`, params: ids };
 }
 
-module.exports = { accessGuard, requirePerm, clearRoleCache, scopeFilter };
+module.exports = { accessGuard, requirePerm, clearRoleCache, scopeFilter, assertScope };
