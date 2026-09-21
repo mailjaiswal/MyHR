@@ -21,7 +21,16 @@ const CORR_META = {
 
 function fmtTime(t) {
   if (!t) return '—';
-  return t.slice(0, 5);
+  const d = new Date(t);
+  if (!isNaN(d)) return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' });
+  return String(t).slice(0, 5);
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  const dt = new Date(String(d).slice(0, 10) + 'T00:00:00');
+  if (isNaN(dt)) return String(d);
+  return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function MusterTable({ records, busy, canManage, onRegularize, onAdjust, onOpen }) {
@@ -30,7 +39,7 @@ function MusterTable({ records, busy, canManage, onRegularize, onAdjust, onOpen 
       <table className="swaniki-table">
         <thead>
           <tr>
-            <th>Employee</th><th>Department</th><th>Shift</th><th>First in</th><th>Last out</th><th>Late</th><th>Hours</th><th>Status</th><th></th>
+            <th>Date</th><th>Employee</th><th>Department</th><th>Shift</th><th>First in</th><th>Last out</th><th>Late</th><th>Hours</th><th>Status</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -39,6 +48,7 @@ function MusterTable({ records, busy, canManage, onRegularize, onAdjust, onOpen 
             const canFix = r.status === 'ABSENT' || r.status === 'HALF_DAY';
             return (
               <tr key={r.id}>
+                <td className="mono" style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.duty_date)}</td>
                 <td>
                   <div onClick={() => onOpen(r)} title="View detailed attendance" style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer' }}>
                     <span className="avatar-sq">{(r.full_name || '?')[0]}</span>
@@ -73,7 +83,7 @@ function MusterTable({ records, busy, canManage, onRegularize, onAdjust, onOpen 
             );
           })}
           {records.length === 0 && (
-            <tr><td colSpan={9}><div className="empty-state"><p>No records for the selected filters.</p></div></td></tr>
+            <tr><td colSpan={10}><div className="empty-state"><p>No records for the selected filters.</p></div></td></tr>
           )}
         </tbody>
       </table>
@@ -196,8 +206,8 @@ export default function Attendance() {
   const pendingCorrs = corrections.filter(c => c.status === 'PENDING');
 
   const exportCsv = () => {
-    const rows = [['Employee Code', 'Employee', 'Department', 'Shift', 'Status', 'First In', 'Last Out', 'Late Min', 'Hours']];
-    records.forEach(r => rows.push([r.employee_code, r.full_name, r.department_name, r.shift_name, r.status, r.first_in_time || '', r.last_out_time || '', r.late_minutes || 0, Number(r.total_hours || 0).toFixed(1)]));
+    const rows = [['Date', 'Employee Code', 'Employee', 'Department', 'Shift', 'Status', 'First In', 'Last Out', 'Late Min', 'Hours']];
+    records.forEach(r => rows.push([String(r.duty_date).slice(0, 10), r.employee_code, r.full_name, r.department_name, r.shift_name, r.status, fmtTime(r.first_in_time), fmtTime(r.last_out_time), r.late_minutes || 0, Number(r.total_hours || 0).toFixed(1)]));
     const csv = rows.map(x => x.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const a = document.createElement('a');
@@ -409,7 +419,7 @@ export default function Attendance() {
                         const st = STATUS_META[r.status] || STATUS_META.ABSENT;
                         return (
                           <tr key={r.id}>
-                            <td className="mono">{new Date(r.duty_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
+                            <td className="mono">{fmtDate(r.duty_date)}</td>
                             <td className="mono">{fmtTime(r.first_in_time)}</td>
                             <td className="mono">{fmtTime(r.last_out_time)}</td>
                             <td className="mono">{Number(r.regular_hours || 0).toFixed(1)}</td>

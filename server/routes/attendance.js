@@ -100,7 +100,7 @@ router.get('/records', async (req, res) => {
       params.push(`%${search}%`, `%${search}%`);
     }
 
-    query += ` ORDER BY e.employee_code ASC`;
+    query += ` ORDER BY e.employee_code ASC, a.duty_date DESC`;
 
     const records = await db.all(query, ...params);
     return res.json({ success: true, count: records.length, records });
