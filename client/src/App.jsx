@@ -30,6 +30,7 @@ function AppContent() {
   const [isPayslipOpen, setIsPayslipOpen] = useState(false);
   const [payslipData, setPayslipData] = useState(null);
   const [payslipEmployeeId, setPayslipEmployeeId] = useState(null);
+  const [settingsNav, setSettingsNav] = useState(null);
 
   const openPayslip = async (employeeId, monthYear) => {
     try {
@@ -45,6 +46,12 @@ function AppContent() {
     } catch (err) {
       alert(`Error fetching payslip: ${err.message}`);
     }
+  };
+
+  // Cross-page navigation: allow pages to jump to another tab, optionally deep-linking a Settings sub-tab.
+  const handleNavigate = (tab, sub) => {
+    if (tab === 'settings') setSettingsNav({ tab: sub || 'company', n: Date.now() });
+    setActiveTab(tab);
   };
 
   // Loading state
@@ -73,10 +80,10 @@ function AppContent() {
       case 'payroll': return <Payroll onOpenPayslip={openPayslip} />;
       case 'employees': return <Employees />;
       case 'leaves': return <Leaves />;
-      case 'shift_roster': return <div className="page"><ShiftRoster /></div>;
+      case 'shift_roster': return <div className="page"><ShiftRoster onNavigate={handleNavigate} /></div>;
       case 'regularization': return <Regularization />;
       case 'audit': return <AuditLog />;
-      case 'settings': return <Settings />;
+      case 'settings': return <Settings initialTab={settingsNav} onNavigate={handleNavigate} />;
       case 'demo': return <DemoLab demoKey={demoKey} />;
       default: return <Dashboard onNavigate={setActiveTab} />;
     }

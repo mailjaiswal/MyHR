@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useOrganization } from '../context/OrganizationContext';
-import { Clock, ShieldCheck, AlertCircle, Moon, Sun, Sunrise, Sunset, Edit3, Save, X, Check, Calendar } from 'lucide-react';
+import { Clock, ShieldCheck, AlertCircle, Moon, Sun, Sunrise, Sunset, Edit3, Save, X, Check, Calendar, Settings2 } from 'lucide-react';
 import Shift24HourTimeline from '../components/Shift24HourTimeline';
 
-export default function ShiftRoster() {
+export default function ShiftRoster({ onNavigate }) {
   const { org } = useOrganization();
   const { authFetch: fetch, hasPerm } = useAuth();
   const { isDark } = useTheme();
@@ -20,6 +20,8 @@ export default function ShiftRoster() {
     is_cross_midnight: 0
   });
   const [saveStatus, setSaveStatus] = useState(null);
+  const [busyEmp, setBusyEmp] = useState(null);
+  const [assignMsg, setAssignMsg] = useState(null);
 
   const loadData = () => {
     fetch('/api/v1/organization/shifts')
@@ -75,6 +77,31 @@ export default function ShiftRoster() {
   };
 
   const isSuperAdmin = hasPerm('ROSTER_EDIT');
+  const canAssign = hasPerm('EMPLOYEES_EDIT');
+  const shiftById = Object.fromEntries(shifts.map(s => [s.id, s]));
+
+  const changeEmployeeShift = async (empId, shiftId) => {
+    setBusyEmp(empId);
+    setAssignMsg(null);
+    try {
+      const res = await fetch(`/api/v1/organization/employees/${empId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shift_id: shiftId || null })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEmployees(prev => prev.map(e => e.id === empId ? { ...e, shift_id: data.employee.shift_id, shift_name: data.employee.shift_name } : e));
+        setAssignMsg(`Assigned ${data.employee.full_name} to ${data.employee.shift_name || 'no shift'}`);
+      } else {
+        alert(data.error || 'Failed to update shift');
+      }
+    } catch (err) {
+      alert(`Error updating shift: ${err.message}`);
+    } finally {
+      setBusyEmp(null);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -93,11 +120,23 @@ export default function ShiftRoster() {
           </p>
         </div>
 
-        {isSuperAdmin && (
-          <span className="pill-badge pill-rose" style={{ padding: '0.35rem 0.75rem' }}>
-            SUPER ADMIN SHIFT EDITING ENABLED
-          </span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {(canAssign || isSuperAdmin) && onNavigate && (
+            <button
+              className="btn-swaniki btn-swaniki-ghost"
+              onClick={() => onNavigate('settings', 'roster')}
+              style={{ fontSize: '0.75rem', padding: '0.45rem 0.75rem' }}
+            >
+              <Settings2 size={14} style={{ marginRight: '0.35rem', verticalAlign: '-2px' }} />
+              <span>Manage in Admin Panel</span>
+            </button>
+          )}
+          {isSuperAdmin && (
+            <span className="pill-badge pill-rose" style={{ padding: '0.35rem 0.75rem' }}>
+              SUPER ADMIN SHIFT EDITING ENABLED
+            </span>
+          )}
+        </div>
       </div>
 
       {saveStatus && (
@@ -115,6 +154,12 @@ export default function ShiftRoster() {
         }}>
           <Check size={16} />
           <span>{saveStatus}</span>
+        </div>
+      )}
+
+      {assignMsg && (
+        <div style={{ padding: '0.6rem 1rem', borderRadius: '0.6rem', background: 'rgba(16, 185, 129, 0.10)', border: '1px solid rgba(16, 185, 129, 0.28)', fontSize: '0.8125rem', color: '#10b981', fontWeight: 600 }}>
+          <Check size={13} style={{ verticalAlign: '-2px', marginRight: '0.35rem' }} />{assignMsg}
         </div>
       )}
 
@@ -311,10 +356,10 @@ export default function ShiftRoster() {
               {org ? `${org.name} Roster Staff Assignments` : 'Roster Staff Assignments'}
             </h3>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-              Real-time assignment across ICU, Emergency, OT, and Inpatient units
+              {canAssign ? 'Use the dropdown on each row to assign a shift — changes save instantly.' : 'The duty shift assigned to each employee.'}
             </p>
           </div>
-          <span className="pill-badge pill-emerald">50 ACTIVE PERSONNEL</span>
+          <span className="pill-badge pill-emerald">{employees.length} ACTIVE PERSONNEL</span>
         </div>
 
         <div className="table-wrapper">
@@ -347,12 +392,25 @@ export default function ShiftRoster() {
                     <td style={{ color: 'var(--text-body)' }}>{emp.department_name}</td>
                     <td style={{ color: 'var(--text-body)' }}>{emp.designation}</td>
                     <td>
-                      <span className={`pill-badge ${emp.shift_name?.includes('Night') ? 'pill-indigo' : 'pill-emerald'}`}>
-                        {emp.shift_name}
-                      </span>
+                      {canAssign ? (
+                        <select
+                          className="input"
+                          style={{ width: 160, padding: '0.3rem 0.5rem', fontSize: '0.75rem' }}
+                          value={emp.shift_id || ''}
+                          disabled={busyEmp === emp.id}
+                          onChange={ev => changeEmployeeShift(emp.id, ev.target.value || '')}
+                        >
+                          <option value="">— Unassigned —</option>
+                          {shifts.map(sh => <option key={sh.id} value={sh.id}>{sh.name}</option>)}
+                        </select>
+                      ) : (
+                        <span className={`pill-badge ${emp.shift_name?.includes('Night') ? 'pill-indigo' : 'pill-emerald'}`}>
+                          {emp.shift_name || '—'}
+                        </span>
+                      )}
                     </td>
-                    <td style={{ color: 'var(--text-muted)' }}>
-                      {emp.shift_name?.includes('Night') ? '20:00 – 08:00 (12h)' : '08:00 – 16:00 (8h)'}
+                    <td className="mono" style={{ color: 'var(--text-muted)' }}>
+                      {(() => { const s = shiftById[emp.shift_id]; return s ? `${s.start_time?.slice(0, 5)} – ${s.end_time?.slice(0, 5)} (${s.duration_hours}h)` : '—'; })()}
                     </td>
                   </tr>
                 );

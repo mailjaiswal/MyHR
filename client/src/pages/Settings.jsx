@@ -29,11 +29,16 @@ const TABS = [
   { key: 'backup', label: 'Backup & Recovery', icon: DatabaseBackup, perm: 'SETTINGS_VIEW' }
 ];
 
-export default function Settings() {
+export default function Settings({ initialTab, onNavigate }) {
   const { org, refreshOrg } = useOrganization();
   const { user, authFetch, hasPerm } = useAuth();
   const api = useCallback((path, opts = {}) => authFetch(path, opts).then(r => r.json()).then(d => (d.success ? d : { success: false, error: d.error })), [authFetch]);
-  const [tab, setTab] = useState('company');
+  const [tab, setTab] = useState(initialTab?.tab || 'company');
+
+  // Allow other pages to deep-link us to a specific tab.
+  useEffect(() => {
+    if (initialTab?.tab) setTab(initialTab.tab);
+  }, [initialTab]);
 
   const [settings, setSettings] = useState(null);
   const [departments, setDepartments] = useState([]);
@@ -530,9 +535,16 @@ export default function Settings() {
       {/* ── Tab: Shift Roster ── */}
       {tab === 'roster' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <div className="demo-banner" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-surface-subtle)', color: 'var(--text-muted)' }}>
-            <Hourglass size={16} />
-            <span>Assign an employee to a shift using the dropdown on each roster tile. Shift timings are configured under Company → Shift timings.</span>
+          <div className="demo-banner" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-surface-subtle)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Hourglass size={16} />
+              Assign an employee to a shift using the dropdown on each roster tile. Shift timings are configured under Company → Shift timings.
+            </span>
+            {onNavigate && (
+              <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('shift_roster')}>
+                <Hourglass size={13} /> Open Shift Roster page
+              </button>
+            )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem' }}>
