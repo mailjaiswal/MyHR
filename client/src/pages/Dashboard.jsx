@@ -114,7 +114,7 @@ export default function Dashboard({ onNavigate }) {
             <span style={{ fontSize: '0.75rem', color: 'var(--text-caption)' }}>Hours logged &middot; {dateRange.label}</span>
           </div>
           <div className="section-body">
-            <div className="bar-chart">
+            <div className={`bar-chart${trend.length > 10 ? ' bar-chart-dense' : ''}`}>
               {trend.map(t => {
                 const total = Number(t.present) + Number(t.absent) + Number(t.half_day);
                 const presentPct = total > 0 ? Math.round((Number(t.present) / total) * 100) : 0;

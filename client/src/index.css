@@ -1262,6 +1262,27 @@ select.input { appearance: none; }
 .bar-fill-bad { background: linear-gradient(180deg, #f59e0b, var(--brand-rose)); }
 .bar-label { font-size: 0.5938rem; color: var(--text-caption); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 
+/* Dense ranges (e.g. a full month = ~30 daily columns): stand the date label and
+   the total-hours value vertical so both stay fully readable instead of being
+   ellipsis-truncated (dates) or overlapping neighbours (hours). */
+.bar-chart-dense { height: 11.5rem; }
+.bar-chart-dense .bar-hours {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.625rem;
+  white-space: nowrap;
+}
+.bar-chart-dense .bar-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  max-width: none;
+  max-height: 4.5rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: clip;
+  font-size: 0.6563rem;
+}
+
 .demo-banner {
   display: flex;
   align-items: center;
