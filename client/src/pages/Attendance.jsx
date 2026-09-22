@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search, CalendarDays, Fingerprint, Check, Loader2, Download, Clock3, ShieldCheck, X, ThumbsUp, ThumbsDown, Info } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Search, CalendarDays, Fingerprint, Check, Loader2, Download, Clock3, ShieldCheck, X, ThumbsUp, ThumbsDown, Info, Plus, Minus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDateRange } from '../hooks/useDateRange';
 import useEscapeClose from '../hooks/useEscapeClose';
@@ -34,61 +34,143 @@ function fmtDate(d) {
   return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function aggregateRows(rows) {
+  let present = 0, half = 0, absent = 0, hours = 0, late = 0;
+  rows.forEach(r => {
+    const s = r.status;
+    if (s === 'PRESENT' || s === 'OVERTIME' || s === 'REGULARIZED') present++;
+    else if (s === 'HALF_DAY') half++;
+    else if (s === 'ABSENT') absent++;
+    hours += Number(r.total_hours || 0);
+    late += Number(r.late_minutes || 0);
+  });
+  return { present, half, absent, hours, late };
+}
+
 function MusterTable({ records, busy, canManage, onRegularize, onAdjust, onOpen }) {
+  // Employees are collapsed by default: one summary row each, expand to see daily punch rows.
+  const [expanded, setExpanded] = useState(() => new Set());
+
+  const groups = useMemo(() => {
+    const out = [];
+    const idx = {};
+    records.forEach(r => {
+      const key = r.employee_id || r.employee_code;
+      if (!(key in idx)) { idx[key] = { key, emp: r, rows: [] }; out.push(idx[key]); }
+      idx[key].rows.push(r);
+    });
+    return out;
+  }, [records]);
+
+  const toggle = (key) => setExpanded(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
   return (
-    <div className="table-wrap">
-      <table className="swaniki-table">
-        <thead>
-          <tr>
-            <th>Date</th><th>Employee</th><th>Department</th><th>Shift</th><th>First in</th><th>Last out</th><th>Late</th><th>Hours</th><th>Status</th><th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {records.map(r => {
-            const st = STATUS_META[r.status] || STATUS_META.ABSENT;
-            const canFix = r.status === 'ABSENT' || r.status === 'HALF_DAY';
-            return (
-              <tr key={r.id}>
-                <td className="mono" style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.duty_date)}</td>
-                <td>
-                  <div onClick={() => onOpen(r)} title="View detailed attendance" style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer' }}>
-                    <span className="avatar-sq">{(r.full_name || '?')[0]}</span>
-                    <div>
-                      <div style={{ fontWeight: 600, color: 'var(--text-heading)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>{r.full_name}<Info size={12} style={{ opacity: 0.45 }} /></div>
-                      <div className="mono" style={{ fontSize: '0.6563rem', color: 'var(--text-caption)' }}>{r.employee_code}</div>
-                    </div>
-                  </div>
-                </td>
-                <td>{r.department_name}</td>
-                <td>{r.shift_name}</td>
-                <td className="mono">{fmtTime(r.first_in_time)}</td>
-                <td className="mono">{fmtTime(r.last_out_time)}</td>
-                <td className="mono">{Number(r.late_minutes || 0) > 0 ? `${r.late_minutes}m` : '—'}</td>
-                <td className="mono">{Number(r.total_hours || 0).toFixed(1)}h</td>
-                <td><span className={`status-pill ${st.cls}`}>{st.label}</span></td>
-                <td>
-                  <div style={{ display: 'flex', gap: '0.375rem', justifyContent: 'flex-end' }}>
-                    {canFix && (
-                      <button className="btn btn-ghost btn-sm" disabled={busy === r.id} onClick={() => onRegularize(r.id)}>
-                        {busy === r.id ? <Loader2 size={13} className="spin" /> : <Check size={13} />} Regularize
-                      </button>
-                    )}
-                    {canManage && (
-                      <button className="btn btn-ghost btn-sm" onClick={() => onAdjust(r)} title="Override logged hours">
-                        <Clock3 size={13} /> Adjust
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-          {records.length === 0 && (
-            <tr><td colSpan={10}><div className="empty-state"><p>No records for the selected filters.</p></div></td></tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+    <>
+      {groups.length > 0 && (
+        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', padding: '0.625rem 1rem 0' }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => setExpanded(new Set(groups.map(g => g.key)))}>
+            <Plus size={13} /> Expand all
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setExpanded(new Set())}>
+            <Minus size={13} /> Collapse all
+          </button>
+        </div>
+      )}
+      <div className="table-wrap">
+        <table className="swaniki-table">
+          <thead>
+            <tr>
+              <th>Date</th><th>Employee</th><th>Department</th><th>Shift</th><th>First in</th><th>Last out</th><th>Late</th><th>Hours</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map(g => {
+              const isOpen = expanded.has(g.key);
+              const agg = aggregateRows(g.rows);
+              return (
+                <React.Fragment key={g.key}>
+                  {/* Collapsible per-employee summary row */}
+                  <tr onClick={() => toggle(g.key)} style={{ cursor: 'pointer', background: 'var(--bg-surface-subtle)' }}>
+                    <td className="mono" style={{ whiteSpace: 'nowrap', color: 'var(--text-heading)', fontWeight: 600 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                        {isOpen ? <Minus size={15} style={{ color: 'var(--brand-primary)' }} /> : <Plus size={15} style={{ color: 'var(--brand-primary)' }} />}
+                        {g.rows.length} {g.rows.length === 1 ? 'day' : 'days'}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                        <span className="avatar-sq">{(g.emp.full_name || '?')[0]}</span>
+                        <div>
+                          <div style={{ fontWeight: 600, color: 'var(--text-heading)' }}>{g.emp.full_name}</div>
+                          <div className="mono" style={{ fontSize: '0.6563rem', color: 'var(--text-caption)' }}>{g.emp.employee_code}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>{g.emp.department_name}</td>
+                    <td>{g.emp.shift_name}</td>
+                    <td className="mono" style={{ color: 'var(--text-caption)' }}>{'—'}</td>
+                    <td className="mono" style={{ color: 'var(--text-caption)' }}>{'—'}</td>
+                    <td className="mono">{agg.late > 0 ? `${agg.late}m` : '—'}</td>
+                    <td className="mono" style={{ fontWeight: 600 }}>{agg.hours.toFixed(1)}h</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '0.3rem' }}>
+                        <span className="status-pill status-ok" title="Present days">{agg.present}P</span>
+                        {agg.half > 0 && <span className="status-pill status-warn" title="Half days">{agg.half}H</span>}
+                        {agg.absent > 0 && <span className="status-pill status-bad" title="Absent days">{agg.absent}A</span>}
+                      </div>
+                    </td>
+                    <td></td>
+                  </tr>
+                  {/* Expanded daily punch rows */}
+                  {isOpen && g.rows.map(r => {
+                    const st = STATUS_META[r.status] || STATUS_META.ABSENT;
+                    const canFix = r.status === 'ABSENT' || r.status === 'HALF_DAY';
+                    return (
+                      <tr key={r.id}>
+                        <td className="mono" style={{ whiteSpace: 'nowrap', paddingLeft: '1.875rem' }}>{fmtDate(r.duty_date)}</td>
+                        <td>
+                          <div onClick={() => onOpen(r)} title="View detailed attendance" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', color: 'var(--text-caption)', fontSize: '0.75rem' }}>
+                            <Info size={12} style={{ opacity: 0.5 }} /><span className="mono">{r.employee_code}</span>
+                          </div>
+                        </td>
+                        <td>{r.department_name}</td>
+                        <td>{r.shift_name}</td>
+                        <td className="mono">{fmtTime(r.first_in_time)}</td>
+                        <td className="mono">{fmtTime(r.last_out_time)}</td>
+                        <td className="mono">{Number(r.late_minutes || 0) > 0 ? `${r.late_minutes}m` : '—'}</td>
+                        <td className="mono">{Number(r.total_hours || 0).toFixed(1)}h</td>
+                        <td><span className={`status-pill ${st.cls}`}>{st.label}</span></td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '0.375rem', justifyContent: 'flex-end' }}>
+                            {canFix && (
+                              <button className="btn btn-ghost btn-sm" disabled={busy === r.id} onClick={() => onRegularize(r.id)}>
+                                {busy === r.id ? <Loader2 size={13} className="spin" /> : <Check size={13} />} Regularize
+                              </button>
+                            )}
+                            {canManage && (
+                              <button className="btn btn-ghost btn-sm" onClick={() => onAdjust(r)} title="Override logged hours">
+                                <Clock3 size={13} /> Adjust
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
+            {records.length === 0 && (
+              <tr><td colSpan={10}><div className="empty-state"><p>No records for the selected filters.</p></div></td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
