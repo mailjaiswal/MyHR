@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Banknote, FileText, Download, Play, Loader2, Zap } from 'lucide-react';
 import { useOrganization } from '../context/OrganizationContext';
 import { useAuth } from '../context/AuthContext';
+import { formatMonthYear } from '../utils/format';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -89,7 +90,7 @@ export default function Payroll({ onOpenPayslip }) {
         </div>
         <div className="stat-card">
           <span className="stat-label"><Zap size={14} style={{ color: '#d97706' }} /> Last run</span>
-          <span className="stat-value">{runs[0] ? runs[0].month_year : '—'}</span>
+          <span className="stat-value">{runs[0] ? formatMonthYear(runs[0].month_year) : '—'}</span>
           <span className="stat-hint">{runs[0] ? (runs[0].status || 'COMPLETED') : 'No payroll processed yet'}</span>
         </div>
       </div>
@@ -168,9 +169,9 @@ export default function Payroll({ onOpenPayslip }) {
                   key={r.id}
                   onClick={() => setMonth(r.month_year)}
                   style={{ cursor: 'pointer' }}
-                  title={`View ${r.month_year}`}
+                  title={`View ${formatMonthYear(r.month_year)}`}
                 >
-                  <td className="mono" style={{ fontWeight: 600, color: 'var(--brand-primary)' }}>{r.month_year}</td>
+                  <td className="mono" style={{ fontWeight: 600, color: 'var(--brand-primary)' }}>{formatMonthYear(r.month_year)}</td>
                   <td>{r.employee_count}</td>
                   <td className="mono">{inr(r.net_payroll)}</td>
                   <td><span className="status-pill status-ok">{r.status || 'COMPLETED'}</span></td>

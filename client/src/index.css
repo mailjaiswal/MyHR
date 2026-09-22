@@ -503,16 +503,17 @@ p {
   font-size: 0.6875rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  padding: 0.875rem 1.25rem;
+  padding: 0.5rem 1rem;
   border-bottom: 1px solid var(--border-color);
   white-space: nowrap;
 }
 
 .clean-table td {
-  padding: 1rem 1.25rem;
+  padding: 0.5rem 1rem;
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-body);
   white-space: nowrap;
+  line-height: 1.25;
 }
 
 .clean-table tr:hover td {
@@ -1121,7 +1122,7 @@ p {
 .swaniki-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
 .swaniki-table th {
   text-align: left;
-  padding: 0.75rem 1.25rem;
+  padding: 0.5rem 1rem;
   font-size: 0.6563rem;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -1131,9 +1132,12 @@ p {
   border-bottom: 1px solid var(--border-color);
   white-space: nowrap;
 }
-.swaniki-table td { padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border-subtle); color: var(--text-body); vertical-align: middle; }
+.swaniki-table td { padding: 0.5rem 1rem; border-bottom: 1px solid var(--border-subtle); color: var(--text-body); vertical-align: middle; white-space: nowrap; line-height: 1.25; }
 .swaniki-table tbody tr:last-child td { border-bottom: none; }
 .swaniki-table tbody tr:hover td { background: var(--table-hover); }
+/* Full-width placeholder cells (no data / loading) may wrap to stay readable */
+.swaniki-table td .empty-state,
+.swaniki-table td .loading-state { white-space: normal; }
 .table-wrap { overflow-x: auto; min-width: 0; }
 
 .status-pill {

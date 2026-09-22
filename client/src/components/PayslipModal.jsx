@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Printer, Download, ShieldCheck, Activity, History } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import useEscapeClose from '../hooks/useEscapeClose';
+import { formatMonthYear } from '../utils/format';
 
 export default function PayslipModal({ isOpen, onClose, payslipData, employeeId, onViewPayslip }) {
   const { authFetch } = useAuth();
@@ -106,7 +107,7 @@ export default function PayslipModal({ isOpen, onClose, payslipData, employeeId,
                 >
                   {history.map(h => (
                     <option key={h.month_year} value={h.month_year}>
-                      {h.month_year}
+                      {formatMonthYear(h.month_year)}
                     </option>
                   ))}
                 </select>
@@ -175,7 +176,7 @@ export default function PayslipModal({ isOpen, onClose, payslipData, employeeId,
             fontWeight: 700,
             color: '#0f172a'
           }}>
-            PAYSLIP FOR THE MONTH OF: {payslip?.month_year}
+            PAYSLIP FOR THE MONTH OF: {formatMonthYear(payslip?.month_year)}
           </div>
         </div>
 
