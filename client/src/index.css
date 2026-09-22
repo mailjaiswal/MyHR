@@ -944,6 +944,26 @@ p {
 .sidebar-user-desig { font-size: 0.6563rem; color: var(--text-caption); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sidebar-theme-btn { margin-left: auto; }
 
+/* User/profile dropdown that opens UPWARD from the sidebar footer.
+   Deliberately separate from .persona-menu (a downward navbar dropdown) to
+   avoid conflicting top/bottom offsets collapsing the box to a hairline. */
+.sidebar-user-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 0.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 0.9rem;
+  box-shadow: var(--shadow-lg);
+  z-index: 60;
+  padding: 0.4rem;
+  animation: fadeSlide 0.15s ease;
+}
+
 /* ================= Topbar ================= */
 .topbar {
   position: sticky;

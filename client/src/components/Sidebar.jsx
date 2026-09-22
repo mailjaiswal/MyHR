@@ -140,9 +140,9 @@ export default function Sidebar({ activeTab, setActiveTab, demoKey, setDemoKey, 
             {isDark ? <Sun size={16} /> : <Moon size={16} />}
           </button>
 
-          {/* User dropdown */}
+          {/* User dropdown (opens upward; see .sidebar-user-menu) */}
           {userMenuOpen && (
-            <div className="persona-menu" style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, marginBottom: '0.5rem' }}>
+            <div className="sidebar-user-menu">
               <button className="persona-option" onClick={() => { setShowPwdModal(true); setUserMenuOpen(false); }}>
                 <KeyRound size={15} />
                 <span className="persona-option-meta">
