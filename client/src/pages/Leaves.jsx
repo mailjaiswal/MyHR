@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { CalendarClock, Plus, X, Check, ThumbsUp, ThumbsDown, Loader2, UserRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDateRange } from '../hooks/useDateRange';
+import useEscapeClose from '../hooks/useEscapeClose';
 import DateRangePicker from '../components/DateRangePicker';
 
 const STATUS_META = {
@@ -24,6 +25,9 @@ export default function Leaves() {
   const [requests, setRequests] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  
+    // Escape closes the new-leave-request form.
+    useEscapeClose(showForm, () => setShowForm(false));
   const [busyId, setBusyId] = useState(null);
   const [form, setForm] = useState({ employee_id: '', leave_type_id: '', from_date: '', to_date: '', reason: '' });
 

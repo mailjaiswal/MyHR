@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import useEscapeClose from '../hooks/useEscapeClose';
 import {
   X,
   Search,
@@ -22,6 +23,8 @@ export default function DataDrilldownModal({ isOpen, onClose, type = 'ATTENDANCE
   const { isDark } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
 

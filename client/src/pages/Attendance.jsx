@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, CalendarDays, Fingerprint, Check, Loader2, Download, Clock3, ShieldCheck, X, ThumbsUp, ThumbsDown, Info } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDateRange } from '../hooks/useDateRange';
+import useEscapeClose from '../hooks/useEscapeClose';
 import DateRangePicker from '../components/DateRangePicker';
 
 const STATUS_META = {
@@ -117,6 +118,10 @@ export default function Attendance() {
   const [adjReason, setAdjReason] = useState('');
   const [adjSaving, setAdjSaving] = useState(false);
   const [detail, setDetail] = useState(null);
+
+  // Escape closes the top-most popup (detail takes priority over the adjust form).
+  useEscapeClose(!!detail, () => setDetail(null));
+  useEscapeClose(!!adjustFor && !detail, () => setAdjustFor(null));
 
   const loadRecords = useCallback(() => {
     setLoading(true);

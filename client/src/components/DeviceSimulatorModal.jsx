@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, Cpu, CheckCircle2, AlertTriangle, Fingerprint, ScanFace } from 'lucide-react';
+import useEscapeClose from '../hooks/useEscapeClose';
 
 export default function DeviceSimulatorModal({ isOpen, onClose }) {
+  useEscapeClose(isOpen, onClose);
   const [employeeId, setEmployeeId] = useState('emp_01'); // Default: Sneha Goswami
   const [deviceId, setDeviceId] = useState('dev_01');
   const [punchType, setPunchType] = useState('IN');

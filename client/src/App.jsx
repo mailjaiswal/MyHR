@@ -29,6 +29,7 @@ function AppContent() {
 
   const [isPayslipOpen, setIsPayslipOpen] = useState(false);
   const [payslipData, setPayslipData] = useState(null);
+  const [payslipEmployeeId, setPayslipEmployeeId] = useState(null);
 
   const openPayslip = async (employeeId, monthYear) => {
     try {
@@ -36,6 +37,7 @@ function AppContent() {
       const data = await res.json();
       if (data.success) {
         setPayslipData(data);
+        setPayslipEmployeeId(employeeId);
         setIsPayslipOpen(true);
       } else {
         alert(data.error || 'Failed to fetch payslip');
@@ -125,6 +127,8 @@ function AppContent() {
         isOpen={isPayslipOpen}
         onClose={() => setIsPayslipOpen(false)}
         payslipData={payslipData}
+        employeeId={payslipEmployeeId}
+        onViewPayslip={openPayslip}
       />
 
       {/* Force password change on first login */}

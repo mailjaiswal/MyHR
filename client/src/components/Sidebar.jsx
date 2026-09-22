@@ -14,6 +14,7 @@ import {
   Menu
 } from 'lucide-react';
 import PasswordChangeModal from './PasswordChangeModal';
+import useEscapeClose from '../hooks/useEscapeClose';
 
 const DEMO_NAV = [
   { key: 'simulator', label: 'Device Simulator', desc: 'Simulate biometric punches' },
@@ -28,6 +29,9 @@ export default function Sidebar({ activeTab, setActiveTab, demoKey, setDemoKey, 
   const { org } = useOrganization();
   const { user, role, hasPerm, logout } = useAuth();
   const [demoOpen, setDemoOpen] = useState(false);
+
+  // Escape closes the mobile navigation drawer.
+  useEscapeClose(isOpen && typeof onClose === 'function', onClose);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [showPwdModal, setShowPwdModal] = useState(false);
   const menuRef = useRef(null);

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useOrganization } from '../context/OrganizationContext';
 import { useAuth } from '../context/AuthContext';
+import useEscapeClose from '../hooks/useEscapeClose';
 
 const FIELDS = ['name', 'tagline', 'industry_label', 'address', 'contact_person', 'director_name', 'director_title', 'contact_phone', 'contact_email', 'gstin', 'registration_no'];
 const ROLES = { SUPER_ADMIN: 'Super Admin', ADMIN: 'Admin', EMPLOYEE: 'Employee' };
@@ -349,6 +350,9 @@ export default function Settings() {
   const [backupCounts, setBackupCounts] = useState({ ok: 0, failed: 0 });
   const [backupBusy, setBackupBusy] = useState(null);
   const [restoreTarget, setRestoreTarget] = useState(null); // { id, confirm }
+
+  // Escape closes the restore-confirmation popup.
+  useEscapeClose(!!restoreTarget, () => setRestoreTarget(null));
 
   const loadBackup = useCallback(async () => {
     const s = await api('/api/v1/backup/settings');

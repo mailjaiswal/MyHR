@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollText, Download, Search, X, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import useEscapeClose from '../hooks/useEscapeClose';
 
 const PAGE_SIZE = 50;
 
@@ -33,6 +34,9 @@ export default function AuditLog() {
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(null);
+
+  // Escape closes the audit-entry detail modal.
+  useEscapeClose(!!selected, () => setSelected(null));
   const [exporting, setExporting] = useState(false);
 
   const set = (k, v) => setFilters(f => ({ ...f, [k]: v }));

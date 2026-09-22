@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import useEscapeClose from '../hooks/useEscapeClose';
 import { Loader2, KeyRound, X } from 'lucide-react';
 
 export default function PasswordChangeModal({ forced = false, onClose }) {
   const { authFetch, setMustChangePassword, logout } = useAuth();
+  // Escape closes the modal only when a change is not mandatory.
+  useEscapeClose(!forced && !!onClose, onClose);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');

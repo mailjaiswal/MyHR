@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import useEscapeClose from '../hooks/useEscapeClose';
 import {
   X,
   FileText,
@@ -26,6 +27,8 @@ export default function CustomReportModal({ isOpen, onClose }) {
   const [department, setDepartment] = useState('ALL');
   const [generatedReport, setGeneratedReport] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
 

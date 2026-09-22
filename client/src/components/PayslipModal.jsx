@@ -1,10 +1,40 @@
-import React from 'react';
-import { X, Printer, Download, ShieldCheck, Activity } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Printer, Download, ShieldCheck, Activity, History } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import useEscapeClose from '../hooks/useEscapeClose';
 
-export default function PayslipModal({ isOpen, onClose, payslipData }) {
+export default function PayslipModal({ isOpen, onClose, payslipData, employeeId, onViewPayslip }) {
+  const { authFetch } = useAuth();
+  const [history, setHistory] = useState([]);
+
+  useEscapeClose(isOpen, onClose);
+
+  // Load this employee's payslip history so prior months can be viewed from here.
+  useEffect(() => {
+    let active = true;
+    if (isOpen && employeeId) {
+      authFetch(`/api/v1/payroll/employee/${employeeId}/history`)
+        .then(r => r.json())
+        .then(d => { if (active && d.success) setHistory(d.history || []); })
+        .catch(() => { /* non-critical */ });
+    } else if (!isOpen) {
+      setHistory([]);
+    }
+    return () => { active = false; };
+  }, [isOpen, employeeId, authFetch]);
+
   if (!isOpen || !payslipData) return null;
 
   const { hospital, payslip } = payslipData;
+
+  const currentMonth = payslip?.month_year;
+
+  const handleMonthChange = (e) => {
+    const selected = e.target.value;
+    if (selected && onViewPayslip && employeeId) {
+      onViewPayslip(employeeId, selected);
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -45,7 +75,7 @@ export default function PayslipModal({ isOpen, onClose, payslipData }) {
           paddingBottom: '1rem',
           borderBottom: '1px solid #e2e8f0'
         }} className="no-print">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             <span style={{
               fontSize: '0.75rem',
               fontWeight: 700,
@@ -57,6 +87,31 @@ export default function PayslipModal({ isOpen, onClose, payslipData }) {
             }}>
               CONFIDENTIAL SALARY STATEMENT
             </span>
+            {history.length > 1 && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>
+                <History size={14} color="#059669" />
+                <select
+                  value={currentMonth || ''}
+                  onChange={handleMonthChange}
+                  style={{
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '0.375rem',
+                    padding: '0.3rem 0.5rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    color: '#0f172a',
+                    background: '#ffffff',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {history.map(h => (
+                    <option key={h.month_year} value={h.month_year}>
+                      {h.month_year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>

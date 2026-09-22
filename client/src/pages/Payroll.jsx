@@ -157,14 +157,20 @@ export default function Payroll({ onOpenPayslip }) {
       <section className="section-card">
         <div className="section-head">
           <span className="section-title"><Banknote size={16} /> Run history</span>
+          <span className="page-desc" style={{ fontSize: '0.75rem' }}>Click a month to view its register &amp; payslips</span>
         </div>
         <div className="table-wrap">
           <table className="swaniki-table">
             <thead><tr><th>Month</th><th>Employees</th><th>Net payroll</th><th>Status</th><th>Processed at</th></tr></thead>
             <tbody>
               {runs.map(r => (
-                <tr key={r.id}>
-                  <td className="mono" style={{ fontWeight: 600, color: 'var(--text-heading)' }}>{r.month_year}</td>
+                <tr
+                  key={r.id}
+                  onClick={() => setMonth(r.month_year)}
+                  style={{ cursor: 'pointer' }}
+                  title={`View ${r.month_year}`}
+                >
+                  <td className="mono" style={{ fontWeight: 600, color: 'var(--brand-primary)' }}>{r.month_year}</td>
                   <td>{r.employee_count}</td>
                   <td className="mono">{inr(r.net_payroll)}</td>
                   <td><span className="status-pill status-ok">{r.status || 'COMPLETED'}</span></td>
