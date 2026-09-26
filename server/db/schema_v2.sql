@@ -453,3 +453,17 @@ UPDATE roles
 SET permissions = permissions || '["AUDIT_VIEW"]'::jsonb
 WHERE data_scope = 'ALL'
   AND NOT permissions @> '"AUDIT_VIEW"'::jsonb;
+
+-- ============================================================
+-- IMPORT LINEAGE: allow a punch to be traced back to the exact
+-- import batch (sync_logs.id) + data source, so a mistaken file
+-- import can be reverted and attendance rebuilt afterwards.
+-- ============================================================
+ALTER TABLE biometric_punches ADD COLUMN IF NOT EXISTS import_batch TEXT;
+ALTER TABLE biometric_punches ADD COLUMN IF NOT EXISTS source_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_punches_batch ON biometric_punches (import_batch);
+
+-- Track which master rows each sync run created (for surgical revert) + revert stamp.
+ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS created_employee_ids TEXT DEFAULT '[]';
+ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS created_device_ids TEXT DEFAULT '[]';
+ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS reverted_at TIMESTAMPTZ;

@@ -19,6 +19,7 @@ async function ensureDevice(deviceSerial, counters) {
     VALUES (?, ?, 'Imported Biometric Terminal', ?, 'Synced from vendor source', NULL, 4370, 'IMPORT', 'ONLINE')
   `, id, serial, `Imported ${serial}`);
   counters.devicesCreated += 1;
+  if (counters.createdDeviceIds) counters.createdDeviceIds.push(id);
   return id;
 }
 
@@ -50,6 +51,7 @@ async function ensureEmployee({ biometricUserId, fullName }, createEmployees, co
   `, id, `IMP-${biometricUserId}`, biometricUserId, name, name, departmentId, shiftId, new Date().toISOString().slice(0, 10));
   counters.employeesCreated += 1;
   if (counters.createdNames) counters.createdNames.push(name);
+  if (counters.createdEmployeeIds) counters.createdEmployeeIds.push(id);
   return db.get('SELECT * FROM employees WHERE id = ?', id);
 }
 

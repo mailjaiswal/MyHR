@@ -150,7 +150,7 @@ async function importAttlog({ buffer, fileName, deviceSerial, sourceId, sourceNa
   const opts = { createEmployees: true, createDevices: true, ...options };
   const startedAt = new Date().toISOString();
   const logId = `sync_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const counters = { recordsFound: 0, recordsImported: 0, recordsSkipped: 0, employeesCreated: 0, employeesMatched: 0, devicesCreated: 0, createdNames: [], errors: [] };
+  const counters = { recordsFound: 0, recordsImported: 0, recordsSkipped: 0, employeesCreated: 0, employeesMatched: 0, devicesCreated: 0, createdNames: [], createdEmployeeIds: [], createdDeviceIds: [], errors: [] };
 
   await writeSyncLog({ id: logId, sourceId, sourceName: sourceName || fileName || 'ATTLOG Import', syncType, startedAt, message: 'ATTLOG import started' });
 
@@ -184,7 +184,9 @@ async function importAttlog({ buffer, fileName, deviceSerial, sourceId, sourceNa
           biometricUserId: punch.biometricUserId,
           punchTime: punch.punchTime,
           verificationMode: punch.verificationMode,
-          inOutMode: punch.inOutMode
+          inOutMode: punch.inOutMode,
+          importBatch: logId,
+          sourceId
         });
         if (result && (result.status === 'SUCCESS' || result.status === 'DUPLICATE_IGNORED')) {
           counters.recordsImported += 1;

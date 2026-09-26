@@ -11,7 +11,7 @@ async function writeSyncLog({ id, sourceId, sourceName, syncType, startedAt, mes
 async function finishSyncLog(id, status, counters, message) {
   await db.run(`
     UPDATE sync_logs
-    SET status = ?, finished_at = ?, records_found = ?, records_imported = ?, records_skipped = ?, employees_created = ?, devices_created = ?, message = ?
+    SET status = ?, finished_at = ?, records_found = ?, records_imported = ?, records_skipped = ?, employees_created = ?, devices_created = ?, message = ?, created_employee_ids = ?, created_device_ids = ?
     WHERE id = ?
   `,
     status,
@@ -22,6 +22,8 @@ async function finishSyncLog(id, status, counters, message) {
     counters.employeesCreated || 0,
     counters.devicesCreated || 0,
     String(message || '').slice(0, 1000),
+    JSON.stringify(counters.createdEmployeeIds || []),
+    JSON.stringify(counters.createdDeviceIds || []),
     id
   );
 }
