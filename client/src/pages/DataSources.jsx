@@ -882,7 +882,7 @@ export default function DataSources() {
                 onClick={applyRoster}
                 disabled={rosterBusy}
                 style={{
-                  padding: '0.55rem 1.1rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem',
+                  padding: '0.55rem 1.1rem', fontSize: '0.8125rem', fontWeight: 700, borderRadius: '0.5rem',
                   cursor: rosterBusy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
                   background: 'rgba(16,185,129,0.14)', color: '#10b981', opacity: rosterBusy ? 0.6 : 1,
                   border: '1px solid rgba(16,185,129,0.35)'
