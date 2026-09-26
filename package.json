@@ -8,6 +8,7 @@
     "dev": "node -e \"const { spawn } = require('child_process'); spawn('npm', ['run', 'server'], { stdio: 'inherit', shell: true }); spawn('npm', ['run', 'client'], { stdio: 'inherit', shell: true });\"",
     "build": "npm --prefix client install && npm --prefix client run build",
     "seed": "node server/db/seedData.js",
+     "import:attlog": "node server/scripts/wipeAndImportAttlog.js",
     "backup": "node server/scripts/backup.js",
     "test:engine": "node tests/verify_engines.js"
   },

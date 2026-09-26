@@ -28,6 +28,9 @@ dist/
 # Edge bridge daemon is deployed on-site, not on the web host
 edge-bridge/
 
+# Client-provided raw biometric exports (PII — not part of the app)
+Biometric Machines data/
+
 # SQLite ephemera (legacy — app is PostgreSQL-only now)
 *.sqlite
 *.sqlite-wal

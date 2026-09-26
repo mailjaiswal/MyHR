@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { db } = require('../db/database');
 const importer = require('../services/sqlFileImporter');
 const loader = require('../services/sqlTextDumpLoader');
+const attlog = require('../services/attlogImporter');
 const syncEngine = require('../services/syncEngine');
 const { requireAuth } = require('../middleware/authGuard');
 const { accessGuard, requirePerm } = require('../middleware/accessGuard');
@@ -176,10 +177,46 @@ router.post('/sources/:id/sync', requirePerm('SETTINGS_EDIT'), async (req, res) 
   }
 });
 
-// ── 7. SQL database file upload + import ───────────────────────────────
-// Accepts a SQLite (.db) binary OR a MySQL/SQL Server text dump as the raw body.
+// ── 7. Biometric file PREVIEW (parse only — nothing is written to the DB) ─
+// Same raw-body + header contract as /upload, but returns the decoded table
+// (columns + rows + summary + matched/new-employee flags) so an admin can
+// eyeball the data and explicitly confirm before importing.
+router.post('/preview', requirePerm('SETTINGS_EDIT'), (req, res) => {
+  const chunks = [];
+  req.on('data', c => chunks.push(c));
+  req.on('error', e => res.status(400).json({ error: e.message }));
+  req.on('end', async () => {
+    const raw = Buffer.concat(chunks);
+    if (!raw.length) {
+      return res.status(400).json({ error: 'No file body received. Send the biometric export file as raw body' });
+    }
+    const fileName = req.headers['x-file-name'] ? String(req.headers['x-file-name']) : null;
+    let options = {};
+    try { options = JSON.parse(req.headers['x-options'] || '{}'); } catch (e) { /* ignore malformed options header */ }
+
+    try {
+      let preview;
+      if (attlog.looksLikeAttlog(raw, fileName)) {
+        preview = await attlog.previewAttlog(raw, fileName);
+      } else if (importer.isSqliteBuffer(raw) || loader.looksLikeSqlText(raw)) {
+        preview = await importer.previewFile(raw, { columnMap: options.columnMap });
+      } else {
+        return res.status(400).json({ error: 'Unrecognized file. Expected a ZKTeco ATTLOG .dat text export, a SQLite (.db) database, or a SQL text dump.' });
+      }
+      preview.fileName = preview.fileName || fileName;
+      if (req.headers['x-device-serial']) preview.deviceSerial = String(req.headers['x-device-serial']) || preview.deviceSerial;
+      return res.json({ success: true, preview });
+    } catch (err) {
+      return res.status(400).json({ success: false, error: err.message });
+    }
+  });
+});
+
+// ── 8. Biometric file upload + import ──────────────────────────────────
+// Accepts a ZKTeco-family ATTLOG text export (*.dat), a SQLite (.db) binary,
+// OR a MySQL/SQL Server text dump as the raw body (auto-detected).
 // Optional headers: X-Source-Id (link to a data_sources row), X-Source-Name,
-// X-Vendor, X-Options (JSON: { createEmployees, columnMap, ... }).
+// X-Vendor, X-File-Name, X-Device-Serial, X-Options (JSON: { createEmployees, columnMap, ... }).
 router.post('/upload', requirePerm('SETTINGS_EDIT'), (req, res) => {
   const chunks = [];
   req.on('data', c => chunks.push(c));
@@ -187,26 +224,38 @@ router.post('/upload', requirePerm('SETTINGS_EDIT'), (req, res) => {
   req.on('end', async () => {
     const raw = Buffer.concat(chunks);
     if (!raw.length) {
-      return res.status(400).json({ error: 'No file body received. Send the SQL database file as raw body' });
+      return res.status(400).json({ error: 'No file body received. Send the biometric export file as raw body' });
     }
-    if (!importer.isSqliteBuffer(raw) && !loader.looksLikeSqlText(raw)) {
-      return res.status(400).json({ error: 'Unrecognized file. Expected a SQLite (.db) database or a SQL text dump.' });
-    }
-
+    const fileName = req.headers['x-file-name'] ? String(req.headers['x-file-name']) : null;
     const sourceId = req.headers['x-source-id'] || null;
-    const sourceName = req.headers['x-source-name'] || 'SQL File Import';
+    const sourceName = req.headers['x-source-name'] || 'Biometric File Import';
     let options = {};
     try { options = JSON.parse(req.headers['x-options'] || '{}'); } catch (e) { /* ignore malformed options header */ }
 
     try {
-      const summary = await importer.importFile({ buffer: raw, sourceId, sourceName, syncType: 'FILE_IMPORT', options });
+      let summary;
+      let detectedTables = null;
+      if (attlog.looksLikeAttlog(raw, fileName)) {
+        // ZKTeco-family ATTLOG .dat text export: one punch per tab-delimited line
+        summary = await attlog.importAttlog({
+          buffer: raw,
+          fileName,
+          deviceSerial: req.headers['x-device-serial'] ? String(req.headers['x-device-serial']) : null,
+          sourceId, sourceName, options
+        });
+      } else if (importer.isSqliteBuffer(raw) || loader.looksLikeSqlText(raw)) {
+        summary = await importer.importFile({ buffer: raw, sourceId, sourceName, syncType: 'FILE_IMPORT', options });
+        detectedTables = summary.detectedTables;
+      } else {
+        return res.status(400).json({ error: 'Unrecognized file. Expected a ZKTeco ATTLOG .dat text export, a SQLite (.db) database, or a SQL text dump.' });
+      }
       const logRow = await db.get(`SELECT * FROM sync_logs WHERE sync_type = 'FILE_IMPORT' ORDER BY started_at DESC LIMIT 1`);
       await audit(req, 'ingestion.file_import', {
         entityType: 'data_source', entityId: sourceId || 'upload',
-        summary: `SQL file import ('${sourceName}'): ${summary.recordsImported ?? 0} punches, ${summary.employeesCreated ?? 0} employees created`,
-        details: { sourceName, recordsFound: summary.recordsFound, recordsImported: summary.recordsImported, employeesCreated: summary.employeesCreated, detectedTables: summary.detectedTables }
+        summary: `File import ('${sourceName}'): ${summary.recordsImported ?? 0} punches, ${summary.employeesCreated ?? 0} employees created`,
+        details: { sourceName, fileName, recordsFound: summary.recordsFound, recordsImported: summary.recordsImported, employeesCreated: summary.employeesCreated, detectedTables: detectedTables || undefined }
       });
-      return res.json({ success: true, detectedTables: summary.detectedTables, import: summary, syncLog: logRow });
+      return res.json({ success: true, detectedTables, import: summary, syncLog: logRow });
     } catch (err) {
       return res.status(400).json({ success: false, error: err.message });
     }

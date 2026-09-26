@@ -97,14 +97,19 @@ router.post('/simulate', requireAuth, accessGuard, requirePerm('DEMO_LAB'), asyn
     if (employeeId) {
       employee = await db.get('SELECT * FROM employees WHERE id = ? OR employee_code = ?', employeeId, employeeId);
     } else {
-      employee = await db.get("SELECT * FROM employees WHERE biometric_user_id = '101' LIMIT 1");
+      // No employee picked: simulate as the first enrolled staff member
+      employee = await db.get("SELECT * FROM employees WHERE biometric_user_id IS NOT NULL ORDER BY biometric_user_id LIMIT 1");
     }
 
     if (!employee) {
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    const effectiveDeviceId = deviceId || 'dev_01';
+    let effectiveDeviceId = deviceId;
+    if (!effectiveDeviceId) {
+      const dev = await db.get('SELECT id FROM devices ORDER BY created_at ASC LIMIT 1');
+      effectiveDeviceId = dev ? dev.id : 'dev_simulator';
+    }
     const now = new Date().toISOString();
 
     const result = await ingestPunch({

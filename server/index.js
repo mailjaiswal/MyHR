@@ -1,4 +1,10 @@
+// Server wall-clock must match the biometric devices (IST) so duty-date
+// anchoring / late-coming math in attendanceEngine lines up with punch times.
+process.env.TZ = process.env.TZ || 'Asia/Kolkata';
+// Load env from repo-root .env and server/.env (first value wins); no-op on
+// platforms (Vercel) that inject env vars directly.
 require('dotenv').config();
+require('dotenv').config({ path: __dirname + '/.env' });
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');

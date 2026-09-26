@@ -3,11 +3,12 @@ import {
   Building2, Save, Loader2, Settings2, Hourglass, Cpu, Pencil, X, Check, Plus,
   CalendarClock, ShieldCheck, Users, ChevronRight, Layers, KeyRound, Trash2, Network,
   Bell, Mail, Send, Inbox,
-  DatabaseBackup, Play, Download, RotateCcw
+  DatabaseBackup, Play, Download, RotateCcw, UploadCloud
 } from 'lucide-react';
 import { useOrganization } from '../context/OrganizationContext';
 import { useAuth } from '../context/AuthContext';
 import useEscapeClose from '../hooks/useEscapeClose';
+import DataSources from './DataSources';
 
 const FIELDS = ['name', 'tagline', 'industry_label', 'address', 'contact_person', 'director_name', 'director_title', 'contact_phone', 'contact_email', 'gstin', 'registration_no'];
 const ROLES = { SUPER_ADMIN: 'Super Admin', ADMIN: 'Admin', EMPLOYEE: 'Employee' };
@@ -26,6 +27,7 @@ const TABS = [
   { key: 'leaves', label: 'Leave Policy', icon: CalendarClock },
   { key: 'access', label: 'Access Management', icon: Network, perm: 'ACCESS_MANAGE' },
   { key: 'notifications', label: 'Notifications & Audit', icon: Bell, perm: 'SETTINGS_VIEW' },
+  { key: 'ingestion', label: 'Data Ingestion', icon: UploadCloud, perm: 'SETTINGS_VIEW' },
   { key: 'backup', label: 'Backup & Recovery', icon: DatabaseBackup, perm: 'SETTINGS_VIEW' }
 ];
 
@@ -1015,6 +1017,11 @@ export default function Settings({ initialTab, onNavigate }) {
             </div>
           </section>
         </div>
+      )}
+
+      {/* ── Tab: Data Ingestion ── */}
+      {tab === 'ingestion' && hasPerm('SETTINGS_VIEW') && (
+        <DataSources />
       )}
 
       {/* ── Tab: Backup & Recovery ── */}

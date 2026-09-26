@@ -9,7 +9,8 @@ const { notify } = require('./notificationService');
  */
 function generatePunchHash(deviceId, biometricUserId, punchTime) {
   const date = new Date(punchTime);
-  const minuteKey = `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()} ${date.getUTCHours()}:${date.getUTCMinutes()}`;
+  // Local (IST) minute key — dedup must group by device wall clock, not UTC.
+  const minuteKey = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()} ${date.getHours()}:${date.getMinutes()}`;
   return crypto
     .createHash('sha256')
     .update(`${deviceId}:${biometricUserId}:${minuteKey}`)

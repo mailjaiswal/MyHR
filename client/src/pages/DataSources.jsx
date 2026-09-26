@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import useEscapeClose from '../hooks/useEscapeClose';
 import {
   Database, PlugZap, UploadCloud, RefreshCw, Trash2, Pencil, CheckCircle2,
-  XCircle, Loader2, Server, FileText, Clock3, Settings2, Wifi, HardDrive, Link2
+  XCircle, Loader2, Server, FileText, Clock3, Settings2, Wifi, HardDrive, Link2,
+  Eye, X, Users, Table2
 } from 'lucide-react';
 
 const STATUS_COLOR = {
@@ -58,6 +60,9 @@ export default function DataSources() {
   const [createEmployees, setCreateEmployees] = useState(true);
   const [importResult, setImportResult] = useState(null);
   const [uploading, setUploading] = useState(false);
+  // Preview state (parse-only, shown before the admin confirms the import)
+  const [preview, setPreview] = useState(null);
+  const [previewing, setPreviewing] = useState(false);
 
   const loadAll = useCallback(() => {
     fetch('/api/v1/ingestion/sources').then(r => r.json()).then(d => { if (d.success) setSources(d.sources); }).catch(() => {});
@@ -184,26 +189,49 @@ export default function DataSources() {
     finally { setBusy(null); }
   };
 
-  const handleUpload = async (e) => {
+  const uploadHeaders = () => ({
+    'Content-Type': 'application/octet-stream',
+    'X-Source-Name': importName || file.name,
+    'X-File-Name': file.name,
+    'X-Vendor': importVendor,
+    'X-Options': JSON.stringify({ createEmployees })
+  });
+
+  // Step 1: parse the selected file and show a full preview table (nothing is written yet).
+  const handlePreview = async (e) => {
     e.preventDefault();
-    if (!file) { notify('Select a .db / .sqlite file first', true); return; }
-    setUploading(true);
+    if (!file) { notify('Select an ATTLOG .dat / .db / .sql file first', true); return; }
+    setPreviewing(true);
     setImportResult(null);
+    setPreview(null);
     try {
       const buf = await file.arrayBuffer();
-      const res = await fetch('/api/v1/ingestion/upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          'X-Source-Name': importName || file.name,
-          'X-Vendor': importVendor,
-          'X-Options': JSON.stringify({ createEmployees })
-        },
-        body: buf
-      });
+      const res = await fetch('/api/v1/ingestion/preview', { method: 'POST', headers: uploadHeaders(), body: buf });
+      const data = await res.json();
+      if (data.success) {
+        setPreview(data.preview);
+      } else {
+        notify(data.error || 'Preview failed', true);
+      }
+    } catch (err) {
+      notify(`Preview failed: ${err.message}`, true);
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  // Step 2: import only after the admin confirms the preview.
+  const performImport = async () => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const res = await fetch('/api/v1/ingestion/upload', { method: 'POST', headers: uploadHeaders(), body: buf });
       const data = await res.json();
       if (data.success) {
         setImportResult(data);
+        setPreview(null);
+        setFile(null);
         notify(`Import complete — ${data.import.recordsImported} punches imported`);
         loadAll();
       } else {
@@ -538,13 +566,14 @@ export default function DataSources() {
         <div style={card}>
           <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-heading)' }}>
             <UploadCloud size={16} color="#f59e0b" />
-            Import Biometric SQL Database File
+            Import Biometric Machine File (ATTLOG .dat / SQL)
           </div>
-          <form onSubmit={handleUpload} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <form onSubmit={handlePreview} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Upload the <strong>SQLite database file ({'*.db'})</strong> or a <strong>MySQL / SQL Server text dump ({'*.sql'})</strong> exported by your biometric machine
-              software (e.g. <em>checkinout / att_log / userinfo</em> tables). We automatically detect the vendor schema,
-              convert the punches, and merge them into attendance.
+              Upload the machine's export file: a <strong>ZKTeco-family ATTLOG text export ({'*_attlog.dat'})</strong>, a
+              <strong> SQLite database ({'*.db'})</strong>, or a <strong>MySQL / SQL Server text dump ({'*.sql'})</strong> from your
+              biometric machine software (e.g. <em>checkinout / att_log / userinfo</em> tables). We automatically detect the
+              format and show a <strong>full preview of every decoded row</strong> — you confirm before anything is written to the database.
             </p>
 
             <div>
@@ -556,7 +585,7 @@ export default function DataSources() {
               }}>
                 <HardDrive size={26} color={file ? '#10b981' : 'var(--text-caption)'} />
                 <span style={{ fontSize: '0.8125rem', color: 'var(--text-heading)', fontWeight: 600 }}>
-                  {file ? file.name : 'Click to choose .db / .sqlite / .sql file'}
+                  {file ? file.name : 'Click to choose _attlog.dat / .db / .sqlite / .sql file'}
                 </span>
                 {file && <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</span>}
                 <input type="file" accept=".db,.sqlite,.sqlite3,.sql,.dat,.csv" style={{ display: 'none' }}
@@ -589,16 +618,16 @@ export default function DataSources() {
 
             <button
               type="submit"
-              disabled={uploading || !file}
+              disabled={previewing || uploading || !file}
               className="btn-swaniki"
               style={{
-                padding: '0.6rem 1.25rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem', cursor: uploading || !file ? 'not-allowed' : 'pointer',
-                background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)', color: isDark ? '#0a0c10' : '#fff', opacity: !file || uploading ? 0.5 : 1,
+                padding: '0.6rem 1.25rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem', cursor: previewing || !file ? 'not-allowed' : 'pointer',
+                background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)', color: isDark ? '#0a0c10' : '#fff', opacity: !file || previewing ? 0.5 : 1,
                 display: 'flex', alignItems: 'center', gap: '0.4rem', width: 'max-content'
               }}
             >
-              {uploading ? <Loader2 size={16} className="spin" /> : <UploadCloud size={16} />}
-              {uploading ? 'Importing...' : 'Upload & Import'}
+              {previewing ? <Loader2 size={16} className="spin" /> : <Eye size={16} />}
+              {previewing ? 'Reading file…' : 'Preview data'}
             </button>
 
             {importResult && (
@@ -608,7 +637,8 @@ export default function DataSources() {
                 </div>
                 <div>Punches found: <strong>{importResult.import.recordsFound}</strong> • Imported: <strong>{importResult.import.recordsImported}</strong> • Skipped: <strong>{importResult.import.recordsSkipped}</strong></div>
                 <div>Employees auto-created: <strong>{importResult.import.employeesCreated}</strong> • Devices auto-created: <strong>{importResult.import.devicesCreated}</strong></div>
-                <div>Detected tables: <strong style={{ color: 'var(--text-heading)' }}>{(importResult.detectedTables || []).join(', ')}</strong></div>
+                {importResult.detectedTables?.length ? <div>Detected tables: <strong style={{ color: 'var(--text-heading)' }}>{importResult.detectedTables.join(', ')}</strong></div> : null}
+                {importResult.import.message && <div style={{ color: 'var(--text-muted)' }}>{importResult.import.message}</div>}
                 {importResult.import.status === 'PARTIAL' && <div style={{ color: '#f59e0b' }}>{importResult.import.message}</div>}
               </div>
             )}
@@ -649,6 +679,152 @@ export default function DataSources() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Full-screen preview shown before the admin confirms the import */}
+      {preview && (
+        <FilePreviewModal
+          preview={preview}
+          uploading={uploading}
+          onClose={() => { if (!uploading) setPreview(null); }}
+          onConfirm={performImport}
+        />
+      )}
+    </div>
+  );
+}
+
+// Full-page preview table for a parsed (but not yet imported) biometric file.
+function FilePreviewModal({ preview, uploading, onClose, onConfirm }) {
+  const { isDark } = useTheme();
+  const [sheet, setSheet] = useState('punches');
+  const hasEmployees = Array.isArray(preview.employees) && preview.employees.length > 0;
+  useEscapeClose(!uploading, onClose);
+
+  const bg = isDark ? '#111318' : '#ffffff';
+  const headBg = isDark ? '#0d0f13' : '#f8fafc';
+
+  const stats = [
+    { label: 'Rows', value: preview.totalRows, color: '#6366f1' },
+    { label: 'Distinct users', value: preview.distinctUsers, color: '#00f2fe' },
+    { label: 'Matched employees', value: preview.knownUsers, color: '#10b981' },
+    { label: 'New (will be created)', value: preview.newUsers, color: preview.newUsers > 0 ? '#f59e0b' : '#10b981' }
+  ];
+  if (preview.skippedRows) stats.push({ label: 'Skipped rows', value: preview.skippedRows, color: '#f43f5e' });
+
+  const fmt = (v) => {
+    if (v === null || v === undefined || v === '') return '—';
+    if (typeof v === 'boolean') return null; // handled specially
+    return String(v);
+  };
+
+  const renderCell = (col, row) => {
+    const v = row[col.key];
+    if (col.key === 'known') {
+      return (
+        <span style={{
+          fontSize: '0.62rem', fontWeight: 700, padding: '0.12rem 0.45rem', borderRadius: '9999px', textTransform: 'uppercase',
+          background: v ? 'rgba(16,185,129,0.14)' : 'rgba(245,158,11,0.14)',
+          color: v ? '#10b981' : '#f59e0b', border: `1px solid ${v ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`
+        }}>{v ? 'Matched' : 'New'}</span>
+      );
+    }
+    return <span style={{ fontFamily: 'ui-monospace, monospace' }}>{fmt(v)}</span>;
+  };
+
+  const tableFor = (columns, rows) => (
+    <div style={{ overflow: 'auto', maxHeight: '52vh', border: '1px solid var(--border-color)', borderRadius: '0.625rem' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+        <thead style={{ position: 'sticky', top: 0, background: headBg, zIndex: 1 }}>
+          <tr>
+            <th style={{ textAlign: 'left', padding: '0.55rem 0.8rem', color: 'var(--text-caption)', fontWeight: 700, fontSize: '0.62rem', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>#</th>
+            {columns.map(c => (
+              <th key={c.key} style={{ textAlign: 'left', padding: '0.55rem 0.8rem', color: 'var(--text-caption)', fontWeight: 700, fontSize: '0.62rem', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{c.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} style={{ borderTop: '1px solid var(--border-color)', background: i % 2 && isDark ? 'rgba(255,255,255,0.015)' : 'transparent' }}>
+              <td style={{ padding: '0.4rem 0.8rem', color: 'var(--text-caption)', fontFamily: 'ui-monospace, monospace' }}>{i + 1}</td>
+              {columns.map(c => (
+                <td key={c.key} style={{ padding: '0.4rem 0.8rem', color: 'var(--text-body)', whiteSpace: 'nowrap' }}>{renderCell(c, row)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const empColumns = [{ key: 'biometricUserId', label: 'User ID' }, { key: 'fullName', label: 'Name' }, { key: 'known', label: 'Employee' }];
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 'min(1100px, 100%)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', background: bg, border: '1px solid var(--border-color)', borderRadius: '1rem', overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
+        {/* Header */}
+        <div style={{ padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+              <span className="pill-badge pill-indigo" style={{ fontSize: '0.62rem' }}>{preview.format === 'ATTLOG' ? 'ATTLOG .dat' : 'SQL FILE'}</span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Review before import · nothing has been written yet</span>
+            </div>
+            <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-heading)' }}>
+              {preview.fileName || (preview.punchTable ? `Punches from ${preview.punchTable}` : 'File preview')}
+            </h2>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              {preview.deviceSerial && <span>Device: <strong className="mono">{preview.deviceSerial}</strong></span>}
+              {preview.punchTable && <span>Punch table: <strong className="mono">{preview.punchTable}</strong></span>}
+              {preview.dateFrom && <span>{String(preview.dateFrom).slice(0, 10)} → {String(preview.dateTo).slice(0, 10)}</span>}
+              {preview.detectedTables?.length ? <span>Tables: {preview.detectedTables.join(', ')}</span> : null}
+            </div>
+          </div>
+          <button onClick={onClose} disabled={uploading} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: uploading ? 'not-allowed' : 'pointer' }}><X size={20} /></button>
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(140px, 1fr))`, gap: '0.75rem', padding: '1rem 1.4rem', borderBottom: '1px solid var(--border-color)' }}>
+          {stats.map(s => (
+            <div key={s.label} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-caption)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</span>
+              <span style={{ fontSize: '1.35rem', fontWeight: 800, color: s.color, lineHeight: 1 }}>{Number(s.value || 0).toLocaleString('en-IN')}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Sheet toggle (punches / employees) when the file also carried a roster */}
+        {hasEmployees && (
+          <div style={{ padding: '0.75rem 1.4rem 0', display: 'flex', gap: '0.5rem' }}>
+            <button className={`demo-tab ${sheet === 'punches' ? 'demo-tab-active' : ''}`} onClick={() => setSheet('punches')}><Table2 size={14} /> Punches ({preview.totalRows})</button>
+            <button className={`demo-tab ${sheet === 'employees' ? 'demo-tab-active' : ''}`} onClick={() => setSheet('employees')}><Users size={14} /> Employee roster ({preview.employeeTotal})</button>
+          </div>
+        )}
+
+        {/* Table */}
+        <div style={{ padding: '1rem 1.4rem', overflow: 'hidden', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          {preview.shownRows < preview.totalRows && (
+            <p style={{ margin: 0, fontSize: '0.72rem', color: '#f59e0b', fontWeight: 600 }}>
+              Showing the first {preview.shownRows.toLocaleString('en-IN')} of {preview.totalRows.toLocaleString('en-IN')} rows — all {preview.totalRows.toLocaleString('en-IN')} will be imported on confirm.
+            </p>
+          )}
+          {sheet === 'employees' && hasEmployees
+            ? tableFor(empColumns, preview.employees)
+            : tableFor(preview.columns, preview.rows)}
+        </div>
+
+        {/* Footer actions */}
+        <div style={{ padding: '1rem 1.4rem', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem', background: headBg }}>
+          <span style={{ marginRight: 'auto', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+            Importing will add {preview.totalRows.toLocaleString('en-IN')} punch{preview.totalRows === 1 ? '' : 'es'}{preview.newUsers > 0 ? ` and create ${preview.newUsers} new employee record${preview.newUsers === 1 ? '' : 's'}` : ''}.
+          </span>
+          <button className="btn-swaniki" onClick={onClose} disabled={uploading} style={{ background: 'transparent', color: 'var(--text-muted)', padding: '0.5rem 1rem', fontSize: '0.8125rem', fontWeight: 600, border: '1px solid var(--border-color)', borderRadius: '0.5rem', cursor: uploading ? 'not-allowed' : 'pointer' }}>
+            Cancel
+          </button>
+          <button className="btn-swaniki" onClick={onConfirm} disabled={uploading} style={{ background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)', color: isDark ? '#0a0c10' : '#fff', padding: '0.5rem 1.25rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem', cursor: uploading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', opacity: uploading ? 0.6 : 1 }}>
+            {uploading ? <Loader2 size={15} className="spin" /> : <CheckCircle2 size={15} />}
+            {uploading ? 'Importing…' : 'Confirm & Import'}
+          </button>
         </div>
       </div>
     </div>

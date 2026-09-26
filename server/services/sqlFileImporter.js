@@ -18,6 +18,7 @@ const { db } = require('../db/database');
 const { ingestPunch } = require('./attendanceEngine');
 const { writeSyncLog, finishSyncLog } = require('./syncLogger');
 const { notify } = require('./notificationService');
+const { slugId, ensureDevice, ensureEmployee, defaultShiftId, defaultDepartmentId, knownBiometricIds } = require('./importerHelpers');
 
 // node:sqlite is loaded lazily so serverless runtimes (which only use PG now)
 // never need it at boot; it's only required when a vendor SQL file is imported.
@@ -267,52 +268,81 @@ function readEmployees(filePath, cfg) {
   try { return readEmployeesOn(dbx, cfg); } finally { dbx.close(); }
 }
 
-// Deterministic database IDs derived from external identifiers
-function slugId(prefix, value) {
-  return `${prefix}_${crypto.createHash('sha1').update(String(value)).digest('hex').slice(0, 10)}`;
-}
+// Deterministic database IDs + device/employee provisioning live in importerHelpers
+// (shared with the ATTLOG .dat importer and the API sync engine).
 
-async function ensureDevice(deviceSerial, counters) {
-  const serial = deviceSerial ? String(deviceSerial) : 'IMPORT_DEFAULT';
-  const existing = await db.get('SELECT id FROM devices WHERE serial_number = ?', serial);
-  if (existing) return existing.id;
-  const id = slugId('dev', serial);
-  await db.run(`
-    INSERT INTO devices (id, serial_number, model, device_name, location, ip_address, port, protocol, status)
-    VALUES (?, ?, 'Imported Biometric Terminal', ?, 'Synced from vendor source', NULL, 4370, 'IMPORT', 'ONLINE')
-  `, id, serial, `Imported ${serial}`);
-  counters.devicesCreated += 1;
-  return id;
-}
-
-async function defaultShiftId() {
-  return ((await db.get('SELECT id FROM shifts ORDER BY created_at ASC LIMIT 1')) || {}).id || null;
-}
-
-async function defaultDepartmentId() {
-  return ((await db.get('SELECT id FROM departments ORDER BY created_at ASC LIMIT 1')) || {}).id || null;
-}
-
-async function ensureEmployee({ biometricUserId, fullName }, createEmployees, counters) {
-  const existing = await db.get('SELECT * FROM employees WHERE biometric_user_id = ?', biometricUserId);
-  if (existing) return existing;
-
-  if (!createEmployees) return null;
-
-  const id = slugId('emp', biometricUserId);
-  const departmentId = await defaultDepartmentId();
-  const shiftId = await defaultShiftId();
-  if (!departmentId || !shiftId) {
-    throw new Error('Cannot auto-create employee: no department/shift configured. Configure shifts & departments first.');
+// Materialise an uploaded buffer into a readable temp SQLite file (text dumps are
+// converted; binary SQLite is written out). Returns the temp path — caller must unlink.
+function resolveTempFilePath(buffer, prefix = 'biometric_import') {
+  const loader = require('./sqlTextDumpLoader');
+  if (isSqliteBuffer(buffer)) {
+    const filePath = path.join(os.tmpdir(), `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.sqlite`);
+    fs.writeFileSync(filePath, buffer);
+    return filePath;
   }
-  const name = fullName || `Imported Employee ${biometricUserId}`;
-  await db.run(`
-    INSERT INTO employees (id, employee_code, biometric_user_id, full_name, designation, department_id, shift_id, gender, date_of_joining, base_ctc, role, status)
-    VALUES (?, ?, ?, ?, 'Imported Employee', ?, ?, 'Other', ?, 0, 'EMPLOYEE', 'ACTIVE')
-  `, id, `IMP-${biometricUserId}`, biometricUserId, name, departmentId, shiftId, new Date().toISOString().slice(0, 10));
-  counters.employeesCreated += 1;
-  if (counters.createdNames) counters.createdNames.push(name);
-  return db.get('SELECT * FROM employees WHERE id = ?', id);
+  if (loader.looksLikeSqlText(buffer)) return loader.materializeToSqlite(buffer);
+  throw new Error('Uploaded file is neither a SQLite database nor a recognizable SQL text dump.');
+}
+
+/**
+ * previewFile — detect schema + read rows WITHOUT importing (NO DB writes to attendance).
+ * Returns a table-ready shape (columns + rows + summary) with a matched/new-employee flag.
+ */
+async function previewFile(buffer, { columnMap, limit = 2000 } = {}) {
+  let filePath = resolveTempFilePath(buffer, 'biometric_preview');
+  try {
+    const dbx = openReadOnly(filePath);
+    let detectRes, punches, employees;
+    try {
+      detectRes = detectOn(dbx);
+      applyColumnMap(detectRes.punch, detectRes.emp, columnMap);
+      if (!detectRes.punch.table) {
+        throw new Error('No recognizable punch/attendance table found. Supported vendor tables: checkinout, att_log, raw_scan, attendancelog, etc. (or configure an explicit columnMap).');
+      }
+      punches = readPunchesOn(dbx, detectRes.punch);
+      if (detectRes.emp.table) employees = readEmployeesOn(dbx, detectRes.emp);
+    } finally {
+      try { dbx.close(); } catch (e) { /* ignore */ }
+    }
+
+    const known = await knownBiometricIds();
+    const rows = punches.slice(0, limit).map(p => ({
+      biometricUserId: p.biometricUserId,
+      utcTime: p.punchTime,
+      verificationMode: p.verificationMode,
+      inOutMode: p.inOutMode,
+      known: known.has(String(p.biometricUserId))
+    }));
+    const times = punches.map(p => p.punchTime).sort();
+    const distinct = new Set(punches.map(p => String(p.biometricUserId)));
+    const newUsers = [...distinct].filter(id => !known.has(id)).length;
+
+    return {
+      format: 'SQL_FILE',
+      punchTable: detectRes.punch.table,
+      detectedTables: detectRes.tables,
+      columns: [
+        { key: 'biometricUserId', label: 'User ID' },
+        { key: 'utcTime', label: 'Punch time (UTC)' },
+        { key: 'verificationMode', label: 'Verify mode' },
+        { key: 'inOutMode', label: 'In / Out' },
+        { key: 'known', label: 'Employee' }
+      ],
+      rows,
+      totalRows: punches.length,
+      shownRows: rows.length,
+      skippedRows: 0,
+      distinctUsers: distinct.size,
+      knownUsers: distinct.size - newUsers,
+      newUsers,
+      dateFrom: times[0] || null,
+      dateTo: times[times.length - 1] || null,
+      employees: (employees || []).slice(0, limit).map(e => ({ ...e, known: known.has(String(e.biometricUserId)) })),
+      employeeTotal: (employees || []).length
+    };
+  } finally {
+    if (filePath) { try { fs.unlinkSync(filePath); } catch (e) { /* best-effort */ } }
+  }
 }
 
 /**
@@ -460,6 +490,7 @@ module.exports = {
   readPunches,
   readEmployees,
   parseDateTime,
+  previewFile,
   importFile,
   PUNCH_TABLE_NAMES,
   EMP_TABLE_NAMES

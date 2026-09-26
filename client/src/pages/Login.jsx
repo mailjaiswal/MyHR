@@ -3,12 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import { Lock, Mail, Loader2, Zap, Sparkles } from 'lucide-react';
 
 const DEMO_PASSWORD = 'Welcome@123';
-// Click-to-fill demo logins, one per data scope, so visitors can explore the app.
+// Click-to-fill demo login so visitors can explore the app with one click.
 const DEMO_ACCOUNTS = [
-  { label: 'Super Admin', scope: 'All data', email: 'aarav.mehta@novaven.example' },
-  { label: 'HR Admin', scope: 'All data', email: 'priya.sharma@novaven.example' },
-  { label: 'Manager', scope: 'Team', email: 'anita.nair@novaven.example' },
-  { label: 'Employee', scope: 'Self', email: 'ramesh.yadav@novaven.example' },
+  { label: 'Administrator', scope: 'All data', email: 'admin@dubeynursinghome.in' },
 ];
 
 export default function Login() {

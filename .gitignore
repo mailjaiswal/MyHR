@@ -21,6 +21,9 @@ dist/
 *.sqlite-journal
 server/backups/
 
+# Client-provided raw biometric exports (real employee punch data — never commit)
+Biometric Machines data/
+
 # Office temp/lock files
 ~$*
 
