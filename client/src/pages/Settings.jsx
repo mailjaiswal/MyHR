@@ -515,7 +515,7 @@ export default function Settings({ initialTab, onNavigate }) {
             )}
           </section>
 
-          <div className="dash-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+          <div className="dash-grid dg-even">
             <section className="section-card">
               <div className="section-head"><span className="section-title"><Layers size={16} /> Departments</span><span style={{ fontSize: '0.75rem', color: 'var(--text-caption)' }}>{departments.length}</span></div>
               <div className="section-body" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -1061,7 +1061,7 @@ export default function Settings({ initialTab, onNavigate }) {
                         <div style={{ fontSize: '0.78rem' }}>{o.to_name || o.to_email}</div>
                         <div className="mono" style={{ fontSize: '0.66rem', color: 'var(--text-caption)' }}>{o.to_email}</div>
                       </td>
-                      <td style={{ maxWidth: 280 }}>{o.subject}</td>
+                      <td className="td-wrap" style={{ maxWidth: 280 }}>{o.subject}</td>
                       <td>
                         <span className={`status-pill ${OUTBOX_PILL[o.status] || 'status-muted'}`} title={o.last_error || ''}>{o.status}{o.attempts > 1 ? ` ×${o.attempts}` : ''}</span>
                       </td>

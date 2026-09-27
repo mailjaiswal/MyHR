@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useDateRange, getRange } from '../hooks/useDateRange';
 import useEscapeClose from '../hooks/useEscapeClose';
+import useClampedPopover from '../hooks/useClampedPopover';
 import DateRangePicker from '../components/DateRangePicker';
 import FilterChipsPopover, { ActiveFilterPills } from '../components/FilterChipsPopover';
 import { MonthGrid, WeekCards, YearHeatmap, ST_CLASS } from '../components/AttendanceCalendar';
@@ -201,6 +202,14 @@ function DayTeamCards({ records, onSelect, onDrill }) {
 
 /* ---------- employee rail ---------- */
 function EmployeeRail({ people, selectedId, query, setQuery, onSelect }) {
+  const railRef = useRef(null);
+  // The rail turns into a horizontal strip on small screens, so keep the picked
+  // employee in view (nearest-only: it never scrolls the page itself).
+  useEffect(() => {
+    const el = railRef.current?.querySelector('.emp-rail-item.is-active');
+    if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [selectedId, people]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: 0 }}>
       <span className="eyebrow"><Users size={12} style={{ verticalAlign: '-1px', marginRight: 4 }} />Choose an employee</span>
@@ -208,7 +217,7 @@ function EmployeeRail({ people, selectedId, query, setQuery, onSelect }) {
         <Search size={14} className="search-icon" />
         <input className="input" placeholder="Search rail…" value={query} onChange={e => setQuery(e.target.value)} />
       </div>
-      <div className="emp-rail">
+      <div className="emp-rail" ref={railRef}>
         {people.map((p, i) => {
           const on = String(p.employee_id) === String(selectedId);
           return (
@@ -380,6 +389,7 @@ function MusterTable({ records, busy, canManage, showEarly, onRegularize, onAdju
 function ExportMenu({ canExport, busy, onPick }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const clampStyle = useClampedPopover(ref, open, 'right');
   useEscapeClose(open, () => setOpen(false));
   useEffect(() => {
     const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -396,7 +406,7 @@ function ExportMenu({ canExport, busy, onPick }) {
         <ArrowUpRight size={12} style={{ transform: 'rotate(90deg)', opacity: 0.5 }} />
       </button>
       {open && (
-        <div className="crp-popover bezel-card anim-fade-in" style={{ position: 'absolute', top: 'calc(100% + 0.5rem)', right: 0, zIndex: 60, width: '15rem' }}>
+        <div className="crp-popover bezel-card anim-fade-in" style={{ position: 'absolute', top: 'calc(100% + 0.5rem)', right: 0, zIndex: 60, width: '15rem', ...clampStyle }}>
           <div className="bezel-inner" style={{ padding: '0.5rem' }}>
             <span className="eyebrow" style={{ display: 'block', padding: '0.25rem 0.5rem' }}>Current filters · all rows</span>
             {[
@@ -822,7 +832,7 @@ export default function Attendance() {
                           <td className="mono">{new Date(c.duty_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
                           <td className="mono">{Number(c.logged_hours || c.original_hours || 0).toFixed(1)}h → <b style={{ color: 'var(--brand-primary)' }}>{Number(c.requested_hours).toFixed(1)}h</b></td>
                           <td className="mono">{c.shift_name}</td>
-                          <td style={{ maxWidth: 220 }}>{c.reason || '—'}</td>
+                          <td className="td-wrap" style={{ maxWidth: 220 }}>{c.reason || '—'}</td>
                           <td><span className={`status-pill ${st.cls}`}>{st.label}</span></td>
                           <td>
                             {c.status === 'PENDING' && (
@@ -877,8 +887,8 @@ export default function Attendance() {
             ) : layout === 'teamDay' ? (
               <DayTeamCards records={records} onSelect={openDay} onDrill={drillToWeek} />
             ) : (
-              <div className={animClass} key={`${from}-${to}-${selectedEmpId}`} style={{ display: 'flex', gap: '1.25rem', padding: '1rem', alignItems: 'flex-start' }}>
-                <div style={{ flex: '0 0 15.5rem', maxWidth: '15.5rem' }}>
+              <div className={`att-workspace ${animClass}`} key={`${from}-${to}-${selectedEmpId}`}>
+                <div className="att-rail-col">
                   <EmployeeRail
                     people={railPeople}
                     selectedId={selectedEmpId}
@@ -887,7 +897,7 @@ export default function Attendance() {
                     onSelect={setSelectedEmpId}
                   />
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="att-pane">
                   {!selectedPerson && railPeople.length === 0 ? (
                     <div className="empty-state" style={{ padding: '2rem' }}><p>No employee matches these filters.</p></div>
                   ) : layout === 'week' ? (

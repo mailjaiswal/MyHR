@@ -25,8 +25,8 @@
   /* Typography */
   --text-heading: #0f172a;
   --text-body: #334155;
-  --text-muted: #64748b;
-  --text-caption: #94a3b8;
+  --text-muted: #475569;
+  --text-caption: #64748b;
 
   /* Brand & Status Accents */
   --brand-primary: #10b981;
@@ -76,8 +76,8 @@
   /* Typography */
   --text-heading: #ffffff;
   --text-body: #cbd5e1;
-  --text-muted: #8a99ad;
-  --text-caption: #5a687c;
+  --text-muted: #98a7bb;
+  --text-caption: #7d8ca2;
 
   /* Neon Accents & Glowing Badges */
   --brand-primary: #10b981;
@@ -813,6 +813,8 @@ p {
 .brand-text { display: flex; flex-direction: column; line-height: 1.05; }
 .brand-name { font-family: var(--font-heading); font-weight: 600; font-size: 1.05rem; color: var(--text-heading); letter-spacing: -0.02em; }
 .brand-sub { font-size: 0.6875rem; color: var(--text-caption); letter-spacing: 0.04em; }
+/* Side-by-side brand lockup (login card) — keeps the two words from colliding */
+.brand-inline { display: flex; align-items: baseline; gap: 0.375rem; }
 
 .sidebar-org { padding: 0 0.5rem 0.75rem; }
 .org-chip {
@@ -1119,7 +1121,7 @@ p {
   box-shadow: var(--shadow-sm);
 }
 .stat-label { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-caption); display: flex; align-items: center; gap: 0.375rem; }
-.stat-value { font-family: var(--font-heading); font-size: 1.75rem; font-weight: 600; letter-spacing: -0.02em; color: var(--text-heading); line-height: 1; }
+.stat-value { font-family: var(--font-heading); font-size: 1.75rem; font-weight: 600; letter-spacing: -0.02em; color: var(--text-heading); line-height: 1.15; }
 .stat-hint { font-size: 0.6875rem; color: var(--text-caption); }
 
 .stat-card-clickable { cursor: pointer; }
@@ -1158,6 +1160,12 @@ p {
 /* Full-width placeholder cells (no data / loading) may wrap to stay readable */
 .swaniki-table td .empty-state,
 .swaniki-table td .loading-state { white-space: normal; }
+/* Free-text columns (audit summary etc.) must wrap inside their cell instead of
+   dragging the whole table a thousand px to the right. The floor keeps the
+   column from being squeezed into a 6-line ribbon. */
+.swaniki-table td.td-wrap { white-space: normal; overflow-wrap: anywhere; min-width: 11rem; }
+/* Long free text is capped to a few lines; the full value lives in the row detail. */
+.clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .table-wrap { overflow-x: auto; min-width: 0; }
 
 .status-pill {
@@ -1171,7 +1179,12 @@ p {
   border-radius: 9999px;
   text-transform: uppercase;
   white-space: nowrap;
+  /* pills live inside tight cards — never let one punch through its box */
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
+.status-pill > span { overflow: hidden; text-overflow: ellipsis; }
 .status-ok { background: var(--brand-primary-light); color: var(--brand-primary); border: 1px solid rgba(16, 185, 129, 0.25); }
 .status-warn { background: var(--brand-amber-light); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.3); }
 .status-bad { background: var(--brand-rose-light); color: var(--brand-rose); border: 1px solid rgba(239, 68, 68, 0.25); }
@@ -1199,7 +1212,8 @@ select.input { appearance: none; }
 .search-box .input { padding-left: 2.25rem; }
 .search-icon { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--text-caption); pointer-events: none; }
 
-.seg { display: inline-flex; background: var(--bg-surface-subtle); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 0.1875rem; gap: 0.1875rem; }
+.seg { display: inline-flex; flex-wrap: wrap; align-self: flex-start; background: var(--bg-surface-subtle); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 0.1875rem; gap: 0.1875rem; max-width: 100%; }
+.seg > * { flex: none; }
 .seg-btn {
   padding: 0.4375rem 0.875rem;
   border: none;
@@ -1253,7 +1267,13 @@ select.input { appearance: none; }
 
 .bar-chart { display: flex; align-items: flex-end; gap: 0.375rem; height: 8.75rem; padding-top: 0.5rem; }
 .dash-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 1.25rem; align-items: stretch; }
-@media (max-width: 1100px) { .dash-grid { grid-template-columns: 1fr; } }
+/* Ratio variants go through these classes, never inline grid-template-columns —
+   an inline value beats the collapse media query below and pushes the second
+   column off-screen on narrow viewports. */
+.dash-grid.dg-even { grid-template-columns: 1fr 1fr; }
+.dash-grid.dg-near { grid-template-columns: 1.05fr 1fr; }
+.dash-grid.dg-start { align-items: start; }
+@media (max-width: 1100px) { .dash-grid, .dash-grid.dg-even, .dash-grid.dg-near { grid-template-columns: 1fr; } }
 .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.375rem; height: 100%; justify-content: flex-end; min-width: 0; }
 .bar-hours { font-size: 0.6563rem; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; white-space: nowrap; }
 .bar-hours-warn { color: #d97706; }
@@ -1801,10 +1821,19 @@ select.input { appearance: none; }
 .sw-toggle[aria-checked="true"] .sw-knob { transform: translateX(1.125rem); }
 
 /* -- Calendar cells -- */
-.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.375rem; }
+/* Tracks keep a legible minimum width; when the pane is narrower than 7 of them,
+   .cal-scroll takes over with a horizontal scroll instead of letting the cells
+   collapse into each other and overlap their text. */
+.cal-scroll { overflow-x: auto; scrollbar-width: thin; padding-bottom: 0.25rem; }
+.cal-head, .cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(var(--cal-track, 4.75rem), 1fr));
+  gap: 0.375rem;
+}
+.cal-head span { display: block; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-cell {
   position: relative; border: 1px solid var(--border-subtle); border-radius: 0.75rem;
-  background: var(--bg-surface); padding: 0.45rem 0.5rem; min-height: 4.6rem;
+  background: var(--bg-surface); padding: 0.45rem 0.5rem; min-height: 4.6rem; min-width: 0;
   display: flex; flex-direction: column; gap: 0.125rem; cursor: pointer;
   transition: transform 0.3s var(--ease-spring), box-shadow 0.3s var(--ease-spring), border-color 0.3s var(--ease-spring);
 }
@@ -1820,24 +1849,48 @@ select.input { appearance: none; }
 .st-absent { background: var(--brand-rose-light); border-color: transparent; }
 .st-leave { background: var(--bg-surface-subtle); border-color: var(--border-subtle); }
 .cal-daynum { font-size: 0.6875rem; font-weight: 700; color: var(--text-caption); }
-.cal-time { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 0.6563rem; color: var(--text-body); }
-.cal-metric { font-size: 0.625rem; color: var(--text-muted); }
+/* Day number + shift tag share one row: the tag is in normal flow and shrinks,
+   so it can never print on top of the number. */
+.cal-cell-top { display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
+.cal-cell-top .cal-daynum { flex: none; }
+.cal-cell-top .cal-shift-badge { margin-left: auto; min-width: 0; }
+.cal-time { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 0.6563rem; color: var(--text-body); overflow-wrap: anywhere; }
+.cal-metric { font-size: 0.625rem; color: var(--text-muted); min-width: 0; overflow-wrap: anywhere; }
 .cal-shift-badge {
-  position: absolute; top: 0.375rem; right: 0.375rem;
   font-size: 0.5625rem; font-weight: 700; letter-spacing: 0.04em;
   padding: 0.0625rem 0.375rem; border-radius: 999px;
   background: var(--bg-surface-subtle); color: var(--text-muted); border: 1px solid var(--border-subtle);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 @media (max-width: 767px) {
-  .cal-grid { gap: 0.25rem; }
+  .cal-head, .cal-grid { gap: 0.25rem; --cal-track: 4.25rem; }
   .cal-cell { min-height: 3.6rem; padding: 0.3rem; }
   .cal-metric { font-size: 0.5625rem; }
 }
+@media (max-width: 560px) {
+  /* Phones: a month cell collapses to a status-tinted day number. Punch times,
+     hours and the shift tag cannot fit 7-across without colliding, and the day
+     popup already carries every detail. */
+  .cal-head, .cal-grid { --cal-track: 2.75rem; }
+  .cal-cell { min-height: 2.9rem; padding: 0.3rem 0.2rem; align-items: center; }
+  .cal-cell .cal-time, .cal-cell .cal-metric, .cal-cell .cal-shift-badge { display: none; }
+  .cal-cell-top { justify-content: center; }
+  .cal-cell .cal-daynum { font-size: 0.75rem; }
+}
 
-/* Week view: seven larger bezel day cards */
-.week-cards { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.75rem; }
-@media (max-width: 1100px) { .week-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@media (max-width: 767px) { .week-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; } }
+/* Week view: seven larger bezel day cards — sized to the pane, not the viewport */
+.week-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.75rem; }
+
+/* -- Attendance workspace: staff rail + calendar pane --
+   The rail is a fixed 15.5rem column only while there is room for it; below that
+   it becomes a full-width strip so the calendar never gets strangled to 185px. */
+.att-workspace { display: flex; gap: 1.25rem; padding: 1rem; align-items: flex-start; }
+.att-rail-col { flex: 0 0 15.5rem; max-width: 15.5rem; min-width: 0; }
+.att-pane { flex: 1; min-width: 0; }
+@media (max-width: 1100px) {
+  .att-workspace { flex-wrap: wrap; gap: 0.875rem; padding: 0.875rem; }
+  .att-rail-col { flex: 1 1 100%; max-width: none; }
+}
 
 /* -- Heatmap -- */
 .heat-row-label { width: 2.25rem; flex: none; font-size: 0.625rem; font-weight: 600; color: var(--text-caption); }
@@ -1897,7 +1950,7 @@ select.input { appearance: none; }
 }
 
 /* -- Custom range calendar -- */
-.crp-popover { animation: fade-up 0.4s var(--ease-spring) both; }
+.crp-popover { animation: fade-up 0.4s var(--ease-spring) both; max-width: calc(100vw - 1.5rem); }
 .crp-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; }
 .crp-day {
   position: relative; border: none; background: transparent; cursor: pointer;

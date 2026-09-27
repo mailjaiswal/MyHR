@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import useEscapeClose from '../hooks/useEscapeClose';
+import { useClampedSelfPopover } from '../hooks/useClampedPopover';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function toStr(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
@@ -54,6 +55,7 @@ export default function CalendarRangePicker({ from, to, onApply, onClose }) {
   });
   const [sel, setSel] = useState({ start: from || '', end: to || '' });
   const ref = useRef(null);
+  const clampStyle = useClampedSelfPopover(ref);
   const monthLabel = base.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
 
   useEscapeClose(true, onClose);
@@ -74,7 +76,7 @@ export default function CalendarRangePicker({ from, to, onApply, onClose }) {
   const canApply = sel.start && sel.end;
 
   return (
-    <div ref={ref} className="crp-popover bezel-card" style={{ position: 'absolute', top: 'calc(100% + 0.5rem)', left: 0, zIndex: 60, width: 'min(92vw, 540px)' }}>
+    <div ref={ref} className="crp-popover bezel-card" style={{ position: 'absolute', top: 'calc(100% + 0.5rem)', left: 0, zIndex: 60, width: 'min(92vw, 540px)', ...clampStyle }}>
       <div className="bezel-inner" style={{ padding: '1rem 1.125rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
           <span className="eyebrow">Pick start &amp; end date</span>

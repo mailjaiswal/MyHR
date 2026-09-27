@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SlidersHorizontal, Search, X } from 'lucide-react';
 import useEscapeClose from '../hooks/useEscapeClose';
+import useClampedPopover from '../hooks/useClampedPopover';
 
 // Chip-based multi-filter popover for the Attendance page.
 // value = { statuses:[], departmentIds:[], designations:[], employeeIds:[], excludeIds:[], lateBy:'', otOnly:false, includeInactive:false }
@@ -24,6 +25,7 @@ export default function FilterChipsPopover({ departments, designations, employee
   const [open, setOpen] = useState(false);
   const [empQuery, setEmpQuery] = useState('');
   const ref = useRef(null);
+  const clampStyle = useClampedPopover(ref, open, 'right');
 
   useEscapeClose(open, () => setOpen(false));
   useEffect(() => {
@@ -73,8 +75,8 @@ export default function FilterChipsPopover({ departments, designations, employee
       </button>
 
       {open && (
-        <div className="crp-popover bezel-card" style={{ position: 'absolute', top: 'calc(100% + 0.5rem)', right: 0, zIndex: 60, width: 'min(92vw, 26rem)' }}>
-          <div className="bezel-inner" style={{ padding: '0.75rem 1rem 1rem', maxHeight: '70vh', overflowY: 'auto' }}>
+        <div className="crp-popover bezel-card" style={{ position: 'absolute', top: 'calc(100% + 0.5rem)', right: 0, zIndex: 60, width: 'min(92vw, 26rem)', ...clampStyle }}>
+          <div className="bezel-inner" style={{ padding: '0.75rem 1rem 1rem', maxHeight: 'min(58vh, 32rem)', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="eyebrow">Filter attendance</span>
               {activeCount > 0 && (
@@ -127,7 +129,7 @@ export default function FilterChipsPopover({ departments, designations, employee
                         <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.full_name}</span>
                         <span className="mono" style={{ fontSize: '0.625rem', color: 'var(--text-caption)' }}>{e.employee_code}</span>
                       </span>
-                      {mode && <span className={`status-pill ${mode === 'in' ? 'status-ok' : 'status-bad'}`}>{mode === 'in' ? 'Only these' : 'Excluded'}</span>}
+                      {mode && <span className={`status-pill ${mode === 'in' ? 'status-ok' : 'status-bad'}`} style={{ flex: 'none' }}><span>{mode === 'in' ? 'Only these' : 'Excluded'}</span></span>}
                     </button>
                   );
                 })}

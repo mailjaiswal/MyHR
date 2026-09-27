@@ -167,6 +167,7 @@ export default function Employees() {
     .then(d => (d.success || d.employee || d.available != null ? d : { success: false, error: d.error })), [authFetch]);
 
   const [employees, setEmployees] = useState([]);
+  const [listReady, setListReady] = useState(false); // stops a false "0 active employees" flash
   const [departments, setDepartments] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [org, setOrg] = useState(null);
@@ -198,7 +199,9 @@ export default function Employees() {
     if (departmentId) qs.set('departmentId', departmentId);
     if (search.trim()) qs.set('search', search.trim());
     if (showInactive && isAdmin) qs.set('status', 'ALL');
-    api(`/api/v1/organization/employees?${qs}`).then(d => d.success && setEmployees(d.employees));
+    api(`/api/v1/organization/employees?${qs}`)
+      .then(d => { if (d.success) setEmployees(d.employees); })
+      .finally(() => setListReady(true));
   }, [departmentId, search, showInactive, isAdmin, api]);
 
   useEffect(() => { api('/api/v1/organization/departments').then(d => d.success && setDepartments(d.departments)); }, [api]);
@@ -327,7 +330,7 @@ export default function Employees() {
       <div className="page-head">
         <div className="page-title-wrap">
           <h1>Employees</h1>
-          <span className="page-desc">{employees.length} {showInactive ? 'records (incl. archived)' : 'active employees'}. Select one to open their dossier.</span>
+          <span className="page-desc">{listReady ? employees.length : '…'} {showInactive ? 'records (incl. archived)' : 'active employees'}. Select one to open their dossier.</span>
         </div>
         <div className="page-actions">
           <DateRangePicker dateRange={dateRange} setMode={setMode} setCustom={setCustom} />
@@ -353,7 +356,7 @@ export default function Employees() {
         </div>
       </div>
 
-      <div className="dash-grid" style={{ gridTemplateColumns: '1.05fr 1fr', alignItems: 'start' }}>
+      <div className="dash-grid dg-near dg-start">
         <section className="section-card">
           <div className="section-head">
             <span className="section-title"><Users size={16} /> Directory</span>

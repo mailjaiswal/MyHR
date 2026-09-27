@@ -52,7 +52,7 @@ function DayBody({ r }) {
     <>
       <span className="cal-time">{fmtT(r.first_in_time)} – {fmtT(r.last_out_time)}</span>
       <span className="cal-metric"><b>{hours.toFixed(1)}h</b>{ot > 0 ? ` · OT ${ot.toFixed(1)}` : ''}</span>
-      <span className="cal-metric" style={{ display: 'flex', gap: '0.375rem' }}>
+      <span className="cal-metric" style={{ display: 'flex', gap: '0.125rem 0.375rem', flexWrap: 'wrap' }}>
         {late > 0 && <span style={{ color: 'var(--brand-amber)' }}>+{late}m late</span>}
         {early != null && early > 0 && <span style={{ color: 'var(--brand-rose)' }}>-{early}m early</span>}
       </span>
@@ -71,9 +71,9 @@ export function MonthGrid({ records, from, to, onSelect }) {
   const lead = (new Date(fy, fm - 1, 1).getDay() + 6) % 7; // Monday-first ghosts
 
   return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.375rem', marginBottom: '0.375rem' }}>
-        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(w => <span key={w} className="eyebrow" style={{ textAlign: 'center' }}>{w}</span>)}
+    <div className="cal-scroll">
+      <div className="cal-head" style={{ marginBottom: '0.375rem' }}>
+        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(w => <span key={w} className="eyebrow">{w}</span>)}
       </div>
       <div className="cal-grid">
         {Array.from({ length: lead }).map((_, i) => <div key={`g${i}`} className="cal-cell cal-ghost" />)}
@@ -88,8 +88,10 @@ export function MonthGrid({ records, from, to, onSelect }) {
               onClick={onSelect ? () => onSelect(r) : undefined}
               title={r ? `${r.shift_name || ''} · ${r.status}` : 'No record'}
             >
-              <span className="cal-daynum">{Number(ds.slice(8))}</span>
-              {r?.shift_name && <span className="cal-shift-badge">{shiftTag(r.shift_name)}</span>}
+              <span className="cal-cell-top">
+                <span className="cal-daynum">{Number(ds.slice(8))}</span>
+                {r?.shift_name && <span className="cal-shift-badge">{shiftTag(r.shift_name)}</span>}
+              </span>
               {r ? <DayBody r={r} /> : <span className="cal-metric" style={{ alignSelf: 'center' }}>—</span>}
             </div>
           );
@@ -115,20 +117,20 @@ export function WeekCards({ records, from, to, onSelect }) {
         return (
           <div key={ds} className="bezel-card view-tile anim-fade-up" style={{ animationDelay: `${i * 60}ms` }} onClick={() => r && onSelect(r)}>
             <div className={`bezel-inner ${r ? ST_CLASS[r.status] || '' : ''}`} style={{ padding: '0.875rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', minHeight: '8.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span className="eyebrow" style={{ color: 'var(--text-heading)' }}>{wd} {Number(ds.slice(8))}</span>
-                {r?.shift_name && <span className="cal-shift-badge" style={{ position: 'static' }}>{shiftTag(r.shift_name)}</span>}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.25rem' }}>
+                <span className="eyebrow" style={{ color: 'var(--text-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wd} {Number(ds.slice(8))}</span>
+                {r?.shift_name && <span className="cal-shift-badge" style={{ flex: 'none' }}>{shiftTag(r.shift_name)}</span>}
               </div>
               {r ? (
                 <>
                   <span className="cal-time">{fmtT(r.first_in_time)}</span>
                   <span className="cal-time">{fmtT(r.last_out_time)}</span>
                   <span className="cal-metric"><b>{metrics(r).hours.toFixed(1)}h</b>{metrics(r).ot > 0 ? ` · OT ${metrics(r).ot.toFixed(1)}h` : ''}</span>
-                  <span className="cal-metric" style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
+                  <span className="cal-metric" style={{ display: 'flex', gap: '0.125rem 0.375rem', flexWrap: 'wrap' }}>
                     {metrics(r).late > 0 && <span style={{ color: 'var(--brand-amber)' }}>+{metrics(r).late}m late</span>}
                     {metrics(r).early != null && metrics(r).early > 0 && <span style={{ color: 'var(--brand-rose)' }}>-{metrics(r).early}m early</span>}
                   </span>
-                  <span className={`status-pill ${ST_PILL[r.status] || 'status-muted'}`} style={{ alignSelf: 'flex-start', marginTop: 'auto' }}>{r.status.replace('_', ' ')}</span>
+                  <span className={`status-pill ${ST_PILL[r.status] || 'status-muted'}`} style={{ alignSelf: 'flex-start', marginTop: 'auto' }}><span>{r.status.replace('_', ' ')}</span></span>
                 </>
               ) : (
                 <span className="cal-metric" style={{ alignSelf: 'center', margin: 'auto' }}>No record</span>

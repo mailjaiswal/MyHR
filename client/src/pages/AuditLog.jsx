@@ -163,7 +163,7 @@ export default function AuditLog() {
                     {e.entity_type || '—'}
                     {e.entity_id && <div className="mono" style={{ fontSize: '0.72rem', color: 'var(--text-caption)' }}>{String(e.entity_id).slice(0, 24)}</div>}
                   </td>
-                  <td style={{ maxWidth: 380 }}>{e.summary || '—'}</td>
+                  <td className="td-wrap" style={{ maxWidth: 380 }}><span className="clamp-3">{e.summary || '—'}</span></td>
                 </tr>
               ))}
               {!loading && entries.length === 0 && (

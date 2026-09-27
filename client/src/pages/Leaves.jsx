@@ -149,7 +149,7 @@ export default function Leaves() {
                     <td><span style={{ color: r.color_code || 'inherit' }}>{r.leave_name}</span></td>
                     <td className="mono">{r.from_date} → {r.to_date}</td>
                     <td className="mono">{r.days}</td>
-                    <td style={{ maxWidth: 240 }}>{r.reason || '—'}</td>
+                    <td className="td-wrap" style={{ maxWidth: 240 }}>{r.reason || '—'}</td>
                     <td><span className={`status-pill ${st.cls}`}>{st.label}</span></td>
                     {canApprove && r.status === 'PENDING' && (
                       <td>

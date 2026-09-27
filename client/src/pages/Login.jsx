@@ -42,7 +42,7 @@ export default function Login() {
           <div className="brand-logo">
             <Zap size={22} strokeWidth={2.2} />
           </div>
-          <div>
+          <div className="brand-inline">
             <span className="brand-name">myHR</span>
             <span className="brand-sub">by Swaniki</span>
           </div>
