@@ -38,6 +38,14 @@ function metrics(r) {
   return { late, early, ot, hours: Number(r?.total_hours || 0) };
 }
 
+// Compact shift tag for the tiny calendar badges: drop the "(19:00 - 07:00)"
+// parenthetical and keep the readable word instead of a blind 4-char slice.
+function shiftTag(name) {
+  const base = String(name || '').replace(/\([^)]*\)/g, '').trim();
+  if (!base) return '';
+  return base.length <= 6 ? base : base.split(/\s+/)[0].slice(0, 4);
+}
+
 function DayBody({ r }) {
   const { late, early, ot, hours } = metrics(r);
   return (
@@ -81,7 +89,7 @@ export function MonthGrid({ records, from, to, onSelect }) {
               title={r ? `${r.shift_name || ''} · ${r.status}` : 'No record'}
             >
               <span className="cal-daynum">{Number(ds.slice(8))}</span>
-              {r?.shift_name && <span className="cal-shift-badge">{String(r.shift_name).slice(0, 4)}</span>}
+              {r?.shift_name && <span className="cal-shift-badge">{shiftTag(r.shift_name)}</span>}
               {r ? <DayBody r={r} /> : <span className="cal-metric" style={{ alignSelf: 'center' }}>—</span>}
             </div>
           );
@@ -109,7 +117,7 @@ export function WeekCards({ records, from, to, onSelect }) {
             <div className={`bezel-inner ${r ? ST_CLASS[r.status] || '' : ''}`} style={{ padding: '0.875rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', minHeight: '8.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <span className="eyebrow" style={{ color: 'var(--text-heading)' }}>{wd} {Number(ds.slice(8))}</span>
-                {r?.shift_name && <span className="cal-shift-badge" style={{ position: 'static' }}>{String(r.shift_name).slice(0, 4)}</span>}
+                {r?.shift_name && <span className="cal-shift-badge" style={{ position: 'static' }}>{shiftTag(r.shift_name)}</span>}
               </div>
               {r ? (
                 <>
@@ -161,14 +169,21 @@ export function YearHeatmap({ records, from, to, onSelect }) {
     return 'heat-r4'; // OVERTIME / REGULARIZED / others
   };
 
+  // Fixed column count = the longest month row. auto-fit collapsed the grid to a
+  // single 14px column on narrow screens, so scroll the row instead.
+  const maxCols = months.reduce((n, [, ds]) => Math.max(n, ds.length), 1);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
       {months.map(([ym, ds], mi) => {
         const label = new Date(ym + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'short' });
         return (
-          <div key={ym} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+          <div key={ym} className="heat-row">
             <span className="heat-row-label">{label}</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, 0.875rem)', gridAutoRows: '0.875rem', gap: '2px' }}>
+            <div
+              className="heat-grid"
+              style={{ gridTemplateColumns: `repeat(${maxCols}, 0.875rem)`, gridAutoRows: '0.875rem' }}
+            >
               {ds.map((d, i) => {
                 const r = byDate[d];
                 return (

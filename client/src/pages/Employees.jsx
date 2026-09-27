@@ -176,7 +176,7 @@ export default function Employees() {
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [tab, setTab] = useState('profile');
-  const [attRows, setAttRows] = useState([]);
+  const [attRows, setAttRows] = useState(null); // null = not fetched yet
 
   const [formMode, setFormMode] = useState(null);           // 'create' | 'edit'
   const [form, setForm] = useState(emptyForm());
@@ -187,6 +187,9 @@ export default function Employees() {
 
   useEscapeClose(!!formMode, () => setFormMode(null));
   useEscapeClose(!!confirmArchive, () => setConfirmArchive(null));
+  // The dossier is an inline panel, so Escape (and an explicit close button) is
+  // the only way out once someone has picked an employee.
+  useEscapeClose(!!selectedId && !formMode && !confirmArchive, () => { setSelectedId(null); setDetail(null); });
 
   const flash = (msg) => { setMessage(msg); setTimeout(() => setMessage(null), 3500); };
 
@@ -206,7 +209,7 @@ export default function Employees() {
   const loadDetail = useCallback((id) => {
     setSelectedId(id);
     setDetail(null);
-    setAttRows([]);
+    setAttRows(null);
     api(`/api/v1/organization/employees/${id}?from=${from}&to=${to}`).then(d => setDetail(d.success ? d : null));
   }, [api, from, to]);
 
@@ -218,8 +221,9 @@ export default function Employees() {
 
   useEffect(() => {
     if (tab !== 'attendance' || !selectedId) return;
+    setAttRows(null);
     api(`/api/v1/attendance/records?from=${from}&to=${to}&employeeId=${selectedId}&includeInactive=1`)
-      .then(d => d.success && setAttRows(d.records));
+      .then(d => setAttRows(d.success ? (d.records || []) : []));
   }, [tab, selectedId, from, to, api]);
 
   /* ---------- id availability ---------- */
@@ -417,16 +421,21 @@ export default function Employees() {
         <section className="section-card">
           <div className="section-head">
             <span className="section-title"><IdCard size={16} /> Dossier</span>
-            {emp && canExport && (
-              <div style={{ display: 'flex', gap: '0.375rem' }}>
-                <button className="island-btn" style={{ padding: '0.3rem 0.7rem', fontSize: '0.6875rem' }} onClick={() => exportDossier('csv')}>
-                  <Download size={12} /> CSV
-                </button>
-                <button className="island-btn" style={{ padding: '0.3rem 0.7rem', fontSize: '0.6875rem' }} onClick={() => exportDossier('xlsx')}>
-                  <Download size={12} /> Excel
-                </button>
-              </div>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+              {emp && canExport && (
+                <>
+                  <button className="island-btn" style={{ padding: '0.3rem 0.7rem', fontSize: '0.6875rem' }} onClick={() => exportDossier('csv')}>
+                    <Download size={12} /> CSV
+                  </button>
+                  <button className="island-btn" style={{ padding: '0.3rem 0.7rem', fontSize: '0.6875rem' }} onClick={() => exportDossier('xlsx')}>
+                    <Download size={12} /> Excel
+                  </button>
+                </>
+              )}
+              {selectedId && (
+                <button className="icon-btn" title="Close dossier" onClick={() => { setSelectedId(null); setDetail(null); }}><X size={16} /></button>
+              )}
+            </div>
           </div>
 
           {!selectedId && (
@@ -507,7 +516,9 @@ export default function Employees() {
                     </div>
                     <div>
                       <div className="section-title" style={{ marginBottom: '0.5rem', fontSize: '0.8125rem' }}><LayoutGrid size={14} /> Day grid</div>
-                      {attRows.length === 0
+                      {attRows == null
+                        ? <div className="loading-state"><Loader2 size={20} className="spin" /></div>
+                        : attRows.length === 0
                         ? <div className="empty-state" style={{ padding: '1.5rem' }}><p>No attendance rows in this range.</p></div>
                         : <MonthGrid records={attRows} from={from} to={to} />}
                     </div>

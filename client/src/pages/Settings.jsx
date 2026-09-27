@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Building2, Save, Loader2, Settings2, Hourglass, Cpu, Pencil, X, Check, Plus,
   CalendarClock, ShieldCheck, Users, ChevronRight, Layers, KeyRound, Trash2, Network,
-  Bell, Mail, Send, Inbox,
+  Bell, Mail, Send, Inbox, Hash,
   DatabaseBackup, Play, Download, RotateCcw, UploadCloud
 } from 'lucide-react';
 import { useOrganization } from '../context/OrganizationContext';
@@ -11,6 +11,11 @@ import useEscapeClose from '../hooks/useEscapeClose';
 import DataSources from './DataSources';
 
 const FIELDS = ['name', 'tagline', 'industry_label', 'address', 'contact_person', 'director_name', 'director_title', 'contact_phone', 'contact_email', 'gstin', 'registration_no'];
+
+// Employee code format (Section G) is edited separately from the free-text grid
+// because both values must be normalised before they reach the API.
+const sanitizeIdPrefix = (v) => String(v ?? '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8);
+const clampIdPadding = (v) => Math.min(6, Math.max(3, parseInt(v, 10) || 4));
 const ROLES = { SUPER_ADMIN: 'Super Admin', ADMIN: 'Admin', EMPLOYEE: 'Employee' };
 const DATA_SCOPES = ['SELF', 'TEAM', 'DEPARTMENT', 'ALL'];
 const ALL_PERMS = [
@@ -76,6 +81,8 @@ export default function Settings({ initialTab, onNavigate }) {
     try {
       const body = {};
       FIELDS.forEach(f => { if (settings[f] !== undefined) body[f] = settings[f]; });
+      body.emp_code_prefix = sanitizeIdPrefix(settings.emp_code_prefix);
+      body.emp_code_padding = clampIdPadding(settings.emp_code_padding);
       const d = await api('/api/v1/organization/settings', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -418,6 +425,10 @@ export default function Settings({ initialTab, onNavigate }) {
   const fmtBytes = (n) => { n = Number(n) || 0; return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB'; };
   const BACKUP_PILL = { SUCCESS: 'status-ok', FAILED: 'status-bad', PENDING: 'status-warn' };
 
+  // Live sample for the "next code" preview under the Employee ID format fields.
+  const idPadding = clampIdPadding(settings?.emp_code_padding);
+  const nextCodePreview = `${sanitizeIdPrefix(settings?.emp_code_prefix) || 'E'}${'0'.repeat(idPadding - 1)}1`;
+
   return (
     <div className="page">
       {msg && <div className="demo-banner" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>{msg}</div>}
@@ -455,6 +466,51 @@ export default function Settings({ initialTab, onNavigate }) {
                     <input className="input" value={settings[f] || ''} onChange={e => setSettings({ ...settings, [f]: e.target.value })} />
                   </div>
                 ))}
+              </div>
+            )}
+          </section>
+
+          <section className="section-card">
+            <div className="section-head">
+              <span className="section-title"><Hash size={16} /> Employee ID format</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-caption)' }}>New records only · retired codes never reused</span>
+            </div>
+            {!settings ? <div className="loading-state"><Loader2 size={22} className="spin" /></div> : (
+              <div className="section-body">
+                <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', margin: '0 0 1rem', maxWidth: '46rem', lineHeight: 1.6 }}>
+                  Applies to every <b>new</b> employee — added from the Employees panel or auto-created by device/CSV imports.
+                  You set the prefix and how wide the number is; the running sequence itself is allocated by the system, so a
+                  code is never re-issued. Existing employee codes are left untouched.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.875rem', alignItems: 'end' }}>
+                  <div className="field">
+                    <label className="field-label">Code prefix</label>
+                    <input
+                      className="input" maxLength={8} placeholder="e.g. BGL"
+                      value={settings.emp_code_prefix || ''}
+                      onChange={e => setSettings({ ...settings, emp_code_prefix: sanitizeIdPrefix(e.target.value) })}
+                    />
+                  </div>
+                  <div className="field">
+                    <label className="field-label">Number padding ({idPadding} digits)</label>
+                    <input
+                      className="input" type="number" min={3} max={6} step={1}
+                      value={settings.emp_code_padding ?? 4}
+                      onChange={e => setSettings({ ...settings, emp_code_padding: e.target.value })}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <span className="eyebrow">Next code looks like</span>
+                    <span className="mono" style={{
+                      alignSelf: 'flex-start', fontSize: '0.9375rem', fontWeight: 700, color: 'var(--brand-primary)',
+                      background: 'var(--brand-primary-light)', border: '1px solid var(--border-color)',
+                      borderRadius: '999px', padding: '0.3rem 0.85rem'
+                    }}>{nextCodePreview}</span>
+                  </div>
+                </div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-caption)', margin: '0.875rem 0 0' }}>
+                  Leave the prefix empty to keep the legacy import ramp (IMP-…, E0001…). Hit “Save company” to apply.
+                </p>
               </div>
             )}
           </section>

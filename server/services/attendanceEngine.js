@@ -48,16 +48,42 @@ function resolveDutyDate(employee, shift, punchDate) {
 
 /**
  * Minutes the last-out punch fell BEFORE the scheduled shift end.
- * Returns 0 when the employee left at/after shift end or data is missing.
+ * Returns 0 when the employee stayed to (or past) the end of shift.
+ * Returns null when the day carries no measurable early-out: no out punch,
+ * no worked hours, or punches that sit outside this shift's window (a stray
+ * or a previous-night punch) — the UI then hides "early-by" instead of
+ * showing a meaningless multi-hour number.
  * Cross-midnight shifts (e.g. 20:00-08:00) end on the day after duty_date.
  */
-function computeEarlyMinutes(dutyDate, lastOut, shift) {
-  if (!lastOut || !shift || !shift.end_time) return 0;
-  const [eh, em] = shift.end_time.split(':').map(Number);
-  let shiftEnd = new Date(`${dutyDate}T${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}:00`);
-  if (shift.is_cross_midnight && eh <= 12) shiftEnd.setDate(shiftEnd.getDate() + 1);
-  const diff = Math.floor((shiftEnd - new Date(lastOut)) / 60000);
-  return diff > 0 ? diff : 0;
+function computeEarlyMinutes(dutyDate, lastOut, shift, opts = {}) {
+  if (!lastOut || !shift || !shift.end_time) return null;
+  if (opts.totalHours != null && !(Number(opts.totalHours) > 0)) return null;
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const [eh, em] = String(shift.end_time).split(':').map(Number);
+  if (!Number.isFinite(eh) || !Number.isFinite(em)) return null;
+  const crossMidnight = !!shift.is_cross_midnight && eh <= 12;
+
+  const shiftEnd = new Date(`${dutyDate}T${pad(eh)}:${pad(em)}:00`);
+  if (crossMidnight) shiftEnd.setDate(shiftEnd.getDate() + 1);
+
+  const [sh, sm] = String(shift.start_time || '').split(':').map(Number);
+  let shiftStart = null;
+  if (Number.isFinite(sh) && Number.isFinite(sm)) {
+    shiftStart = new Date(`${dutyDate}T${pad(sh)}:${pad(sm)}:00`);
+    // Same-clock cross-midnight shift starting at/after its own end time means
+    // the start belongs to the duty date (e.g. 19:00 -> 07:00 next day).
+    if (crossMidnight && sh < eh) shiftStart.setDate(shiftStart.getDate() + 1);
+  }
+
+  const actualOut = new Date(lastOut);
+  if (isNaN(actualOut)) return null;
+  if (shiftStart && actualOut < shiftStart) return null; // punch outside this window
+
+  const diff = Math.floor((shiftEnd - actualOut) / 60000);
+  if (diff <= 0) return 0;
+  if (shiftStart && diff > (shiftEnd - shiftStart) / 60000) return null; // longer than the shift itself
+  return diff;
 }
 
 async function ingestPunch({ deviceId, biometricUserId, punchTime, verificationMode = 'FINGERPRINT', inOutMode = 'AUTO', importBatch = null, sourceId = null }) {
@@ -132,7 +158,7 @@ async function ingestPunch({ deviceId, biometricUserId, punchTime, verificationM
   }
 
   const overtimeHours = totalHours > shift.duration_hours ? Math.round((totalHours - shift.duration_hours) * 10) / 10 : 0;
-  const earlyMinutes = computeEarlyMinutes(dutyDate, lastOut, shift);
+  const earlyMinutes = computeEarlyMinutes(dutyDate, lastOut, shift, { totalHours }) || 0;
 
   let status = 'PRESENT';
   if (totalHours < config.ATTENDANCE_RULES.HALF_DAY_MIN_HOURS) {
@@ -240,7 +266,7 @@ async function recomputeAttendance({ from = null, to = null, employeeIds = null 
       const expected = new Date(`${dutyDate}T${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}:00`);
       let lateMinutes = firstIn > expected ? Math.max(0, Math.floor((firstIn - expected) / 60000)) : 0;
       const overtimeHours = totalHours > shift.duration_hours ? Math.round((totalHours - shift.duration_hours) * 10) / 10 : 0;
-      const earlyMinutes = computeEarlyMinutes(dutyDate, lastOut.toISOString(), shift);
+      const earlyMinutes = computeEarlyMinutes(dutyDate, lastOut.toISOString(), shift, { totalHours }) || 0;
       let status = 'PRESENT';
       if (totalHours < HALF) status = 'ABSENT';
       else if (totalHours < FULL) status = 'HALF_DAY';

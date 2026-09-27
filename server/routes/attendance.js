@@ -81,6 +81,7 @@ function buildRecordsSql(q, req) {
     SELECT a.*, e.full_name, e.employee_code, e.designation, e.status as employee_status,
            e.biometric_user_id,
            d.name as department_name, s.name as shift_name, s.end_time as shift_end_time,
+           s.start_time as shift_start_time,
            s.is_cross_midnight as shift_cross_midnight
     FROM attendance_records a
     JOIN employees e ON a.employee_id = e.id
@@ -169,7 +170,8 @@ function attachEarlyMinutes(rows) {
       const stored = Number(r.undertime_minutes || 0);
       early = stored > 0 ? stored : computeEarlyMinutes(
         String(r.duty_date).slice(0, 10), r.last_out_time,
-        { end_time: r.shift_end_time, is_cross_midnight: r.shift_cross_midnight }
+        { end_time: r.shift_end_time, start_time: r.shift_start_time, is_cross_midnight: r.shift_cross_midnight },
+        { totalHours: r.total_hours }
       );
     }
     return { ...r, early_minutes: early };

@@ -1850,6 +1850,12 @@ select.input { appearance: none; }
 .heat-r3 { background: rgba(239, 68, 68, 0.4); }
 .heat-r4 { background: rgba(16, 185, 129, 0.62); }
 
+/* Heat rows scroll horizontally on narrow screens rather than collapsing to a
+   single column (the grid keeps a fixed square track count per month). */
+.heat-row { display: flex; align-items: center; gap: 0.625rem; overflow-x: auto; padding-bottom: 0.25rem; scrollbar-width: thin; }
+.heat-row .heat-row-label { position: sticky; left: 0; z-index: 1; background: var(--bg-surface); }
+.heat-grid { display: grid; gap: 2px; flex: none; }
+
 /* -- Employee rail -- */
 .emp-rail { display: flex; flex-direction: column; gap: 0.25rem; max-height: 60vh; overflow-y: auto; }
 .emp-rail-item {
@@ -1875,16 +1881,17 @@ select.input { appearance: none; }
 .anim-slide-prev { animation: slide-from-left 0.4s var(--ease-spring) both; }
 
 /* -- Dossier tab bar with sliding underline -- */
-.dossier-tabs { position: relative; display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border-subtle); }
+.dossier-tabs { position: relative; display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border-subtle); overflow-x: auto; scrollbar-width: none; }
 .dossier-tab {
   border: none; background: transparent; cursor: pointer; font-family: var(--font-sans);
   padding: 0.625rem 1rem; font-size: 0.8125rem; font-weight: 600; color: var(--text-muted);
+  flex: none; white-space: nowrap;
   transition: color 0.3s var(--ease-spring), transform 0.3s var(--ease-spring);
 }
 .dossier-tab:hover { color: var(--text-heading); }
 .dossier-tab.is-active { color: var(--brand-primary); }
 .dossier-tab-indicator {
-  position: absolute; bottom: -1px; left: 0; height: 2px; border-radius: 2px;
+  position: absolute; bottom: 0; left: 0; height: 2px; border-radius: 2px;
   background: var(--brand-primary);
   transition: transform 0.45s var(--ease-spring), width 0.45s var(--ease-spring);
 }
