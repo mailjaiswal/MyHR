@@ -6,6 +6,7 @@ const biotime = require('./biotimeApi');
 const { ingestPunch } = require('./attendanceEngine');
 const { writeSyncLog, finishSyncLog } = require('./syncLogger');
 const { notify } = require('./notificationService');
+const { employeeCodeOrFallback } = require('./employeeCodeService');
 
 function encodePassword(plain) {
   if (!plain) return null;
@@ -91,10 +92,13 @@ async function syncApiSource(source, manual = false) {
           const shift = await defaultShiftId();
           if (!dept || !shift) continue;
           const id = `emp_api_${crypto_hash(bioId)}`;
+          const code = await employeeCodeOrFallback(`API-${bioId}`);
+          const taken = await db.get('SELECT full_name FROM employees WHERE employee_code = ?', code);
+          if (taken) { counters.recordsSkipped += 1; continue; }
           await db.run(`
-            INSERT INTO employees (id, employee_code, biometric_user_id, full_name, designation, department_id, shift_id, gender, date_of_joining, base_ctc, role, status)
-            VALUES (?, ?, ?, ?, 'Imported Employee', ?, ?, 'Other', ?, 0, 'EMPLOYEE', 'ACTIVE')
-          `, id, `API-${bioId}`, bioId, name, dept, shift, new Date().toISOString().slice(0, 10));
+            INSERT INTO employees (id, employee_code, biometric_user_id, first_name, full_name, designation, department_id, shift_id, gender, date_of_joining, base_ctc, role, status)
+            VALUES (?, ?, ?, ?, ?, 'Imported Employee', ?, ?, 'Other', ?, 0, 'EMPLOYEE', 'ACTIVE')
+          `, id, code, bioId, name, name, dept, shift, new Date().toISOString().slice(0, 10));
           counters.employeesCreated += 1;
           counters.createdNames.push(name);
         }
@@ -194,10 +198,13 @@ async function ensureEmployee(biometricUserId, fullName, counters) {
     return null;
   }
   const id = `emp_api_${crypto_hash(biometricUserId)}`;
+  const code = await employeeCodeOrFallback(`API-${biometricUserId}`);
+  const taken = await db.get('SELECT full_name FROM employees WHERE employee_code = ?', code);
+  if (taken) return null;
   await db.run(`
-    INSERT INTO employees (id, employee_code, biometric_user_id, full_name, designation, department_id, shift_id, gender, date_of_joining, base_ctc, role, status)
-    VALUES (?, ?, ?, ?, 'Imported Employee', ?, ?, 'Other', ?, 0, 'EMPLOYEE', 'ACTIVE')
-  `, id, `API-${biometricUserId}`, biometricUserId, fullName || `Imported ${biometricUserId}`, departmentId, shiftId, new Date().toISOString().slice(0, 10));
+    INSERT INTO employees (id, employee_code, biometric_user_id, first_name, full_name, designation, department_id, shift_id, gender, date_of_joining, base_ctc, role, status)
+    VALUES (?, ?, ?, ?, ?, 'Imported Employee', ?, ?, 'Other', ?, 0, 'EMPLOYEE', 'ACTIVE')
+  `, id, code, biometricUserId, fullName || `Imported ${biometricUserId}`, fullName || `Imported ${biometricUserId}`, departmentId, shiftId, new Date().toISOString().slice(0, 10));
   counters.employeesCreated += 1;
   if (counters.createdNames) counters.createdNames.push(fullName || `Imported ${biometricUserId}`);
   return db.get('SELECT * FROM employees WHERE id = ?', id);

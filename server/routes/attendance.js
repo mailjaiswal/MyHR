@@ -5,6 +5,7 @@ const { requireAuth } = require('../middleware/authGuard');
 const { accessGuard, requirePerm, scopeFilter, assertScope } = require('../middleware/accessGuard');
 const { audit } = require('../services/auditService');
 const { notify } = require('../services/notificationService');
+const { computeEarlyMinutes } = require('../services/attendanceEngine');
 
 // All attendance endpoints require authentication + access scope
 router.use(requireAuth, accessGuard);
@@ -59,51 +60,182 @@ router.get('/today', async (req, res) => {
   }
 });
 
-// 2. Attendance Records Table (scope-aware, filterable by date range, department, shift, search)
+// 2. Attendance Records (scope-aware, filterable: range, dept, shift, search,
+//    status, employees/excluded, designation, late-by, OT-only, incl. archived)
+const RECORD_STATUSES = ['PRESENT', 'OVERTIME', 'REGULARIZED', 'HALF_DAY', 'ABSENT', 'ON_LEAVE'];
+
+function csvList(v) {
+  return v ? String(v).split(',').map(s => s.trim()).filter(Boolean) : [];
+}
+
+function isOrgAdmin(req) {
+  return ['ADMIN', 'SUPER_ADMIN'].includes(req.currentUser?.role);
+}
+
+// Shared SQL builder for /records and /export so the file always matches the view.
+function buildRecordsSql(q, req) {
+  const ctx = req.accessCtx;
+  const empScope = scopeFilter(ctx, 'e.id');
+
+  let sql = `
+    SELECT a.*, e.full_name, e.employee_code, e.designation, e.status as employee_status,
+           e.biometric_user_id,
+           d.name as department_name, s.name as shift_name, s.end_time as shift_end_time,
+           s.is_cross_midnight as shift_cross_midnight
+    FROM attendance_records a
+    JOIN employees e ON a.employee_id = e.id
+    JOIN departments d ON e.department_id = d.id
+    JOIN shifts s ON a.shift_id = s.id
+    WHERE 1=1 ${empScope.clause}
+  `;
+  const params = [...empScope.params];
+
+  // Archived staff stay out of reports unless an org admin explicitly opts in.
+  if (!(q.includeInactive === '1' && isOrgAdmin(req))) {
+    sql += ` AND e.status = 'ACTIVE'`;
+  }
+
+  if (q.from && q.to) {
+    sql += ` AND a.duty_date BETWEEN ? AND ?`;
+    params.push(q.from, q.to);
+  } else if (q.date) {
+    sql += ` AND a.duty_date = ?`;
+    params.push(q.date);
+  }
+
+  const deptIds = csvList(q.departmentId);
+  if (deptIds.length) {
+    sql += ` AND e.department_id IN (${deptIds.map(() => '?').join(',')})`;
+    params.push(...deptIds);
+  }
+
+  if (q.shiftId) {
+    sql += ` AND a.shift_id = ?`;
+    params.push(q.shiftId);
+  }
+
+  if (q.search) {
+    sql += ` AND (e.full_name ILIKE ? OR e.employee_code ILIKE ? OR e.biometric_user_id ILIKE ?)`;
+    params.push(`%${q.search}%`, `%${q.search}%`, `%${q.search}%`);
+  }
+
+  const statuses = csvList(q.status).filter(s => RECORD_STATUSES.includes(s));
+  if (statuses.length) {
+    sql += ` AND a.status IN (${statuses.map(() => '?').join(',')})`;
+    params.push(...statuses);
+  }
+
+  const empIds = csvList(q.employeeIds);
+  if (empIds.length) {
+    sql += ` AND e.id IN (${empIds.map(() => '?').join(',')})`;
+    params.push(...empIds);
+  }
+  const empId = csvList(q.employeeId); // dossier: one person
+  if (empId.length) {
+    sql += ` AND e.id IN (${empId.map(() => '?').join(',')})`;
+    params.push(...empId);
+  }
+
+  const excl = csvList(q.excludeEmployeeIds);
+  if (excl.length) {
+    sql += ` AND e.id NOT IN (${excl.map(() => '?').join(',')})`;
+    params.push(...excl);
+  }
+
+  const desigs = csvList(q.designation);
+  if (desigs.length) {
+    sql += ` AND e.designation IN (${desigs.map(() => '?').join(',')})`;
+    params.push(...desigs);
+  }
+
+  const lateBy = parseInt(q.lateBy, 10);
+  if (Number.isFinite(lateBy) && lateBy > 0) {
+    sql += ` AND a.late_minutes >= ?`;
+    params.push(lateBy);
+  }
+
+  if (q.otOnly === '1') sql += ` AND a.overtime_hours > 0`;
+
+  sql += ` ORDER BY e.employee_code ASC, a.duty_date DESC`;
+  return { sql, params };
+}
+
+// Attach a display-ready early_minutes: stored value when the engine wrote it,
+// otherwise derived on read for legacy rows; null when it can't be known.
+function attachEarlyMinutes(rows) {
+  return rows.map(r => {
+    let early = null;
+    if (r.last_out_time) {
+      const stored = Number(r.undertime_minutes || 0);
+      early = stored > 0 ? stored : computeEarlyMinutes(
+        String(r.duty_date).slice(0, 10), r.last_out_time,
+        { end_time: r.shift_end_time, is_cross_midnight: r.shift_cross_midnight }
+      );
+    }
+    return { ...r, early_minutes: early };
+  });
+}
+
 router.get('/records', async (req, res) => {
   try {
-    const { date, from, to, departmentId, shiftId, search } = req.query;
-    const ctx = req.accessCtx;
-    const empScope = scopeFilter(ctx, 'e.id');
-
-    let query = `
-      SELECT a.*, e.full_name, e.employee_code, e.designation, d.name as department_name, s.name as shift_name
-      FROM attendance_records a
-      JOIN employees e ON a.employee_id = e.id
-      JOIN departments d ON e.department_id = d.id
-      JOIN shifts s ON a.shift_id = s.id
-      WHERE 1=1 ${empScope.clause}
-    `;
-    const params = [...empScope.params];
-
-    // Support both single-date (legacy) and from/to range
-    if (from && to) {
-      query += ` AND a.duty_date BETWEEN ? AND ?`;
-      params.push(from, to);
-    } else if (date) {
-      query += ` AND a.duty_date = ?`;
-      params.push(date);
-    }
-
-    if (departmentId) {
-      query += ` AND e.department_id = ?`;
-      params.push(departmentId);
-    }
-
-    if (shiftId) {
-      query += ` AND a.shift_id = ?`;
-      params.push(shiftId);
-    }
-
-    if (search) {
-      query += ` AND (e.full_name ILIKE ? OR e.employee_code ILIKE ?)`;
-      params.push(`%${search}%`, `%${search}%`);
-    }
-
-    query += ` ORDER BY e.employee_code ASC, a.duty_date DESC`;
-
-    const records = await db.all(query, ...params);
+    const { sql, params } = buildRecordsSql(req.query, req);
+    const records = attachEarlyMinutes(await db.all(sql, ...params));
     return res.json({ success: true, count: records.length, records });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 2b. Filtered attendance export (CSV / XLSX) — same filters as /records.
+const EXPORT_HEADERS = ['Date', 'Employee Code', 'Employee', 'Biometric ID', 'Department', 'Designation', 'Shift', 'Status', 'First In', 'Last Out', 'Late (min)', 'Early-out (min)', 'Regular h', 'OT h', 'Total h'];
+
+function fmtExportTime(t) {
+  if (!t) return '';
+  const d = new Date(t);
+  return isNaN(d) ? '' : d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' });
+}
+
+router.get('/export', requirePerm('EXPORTS'), async (req, res) => {
+  try {
+    const format = req.query.format === 'xlsx' ? 'xlsx' : 'csv';
+    const { sql, params } = buildRecordsSql(req.query, req);
+    const records = attachEarlyMinutes(await db.all(sql, ...params));
+
+    const body = records.map(r => [
+      String(r.duty_date).slice(0, 10), r.employee_code, r.full_name, r.biometric_user_id || '',
+      r.department_name, r.designation || '', r.shift_name, r.status,
+      fmtExportTime(r.first_in_time), fmtExportTime(r.last_out_time),
+      Number(r.late_minutes || 0), Number(r.early_minutes || 0),
+      Number(r.regular_hours || 0).toFixed(1), Number(r.overtime_hours || 0).toFixed(1),
+      Number(r.total_hours || 0).toFixed(1)
+    ]);
+
+    const from = String(req.query.from || req.query.date || '').slice(0, 10) || 'all';
+    const to = String(req.query.to || '').slice(0, 10) || 'all';
+    const fileName = `Attendance_${from}_to_${to}`;
+
+    if (format === 'csv') {
+      const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const csv = '\uFEFF' + [EXPORT_HEADERS, ...body].map(row => row.map(esc).join(',')).join('\r\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}.csv"`);
+      return res.send(csv);
+    }
+
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'myHR by Swaniki';
+    const ws = wb.addWorksheet('Attendance');
+    ws.columns = EXPORT_HEADERS.map(h => ({ header: h, key: h, width: Math.max(12, h.length + 2) }));
+    body.forEach(row => ws.addRow(Object.fromEntries(EXPORT_HEADERS.map((h, i) => [h, row[i]]))));
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).eachCell(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF7F2' } }; });
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}.xlsx"`);
+    await wb.xlsx.write(res);
+    return res.end();
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

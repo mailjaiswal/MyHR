@@ -5,7 +5,7 @@ import useEscapeClose from '../hooks/useEscapeClose';
 import {
   Database, PlugZap, UploadCloud, RefreshCw, Trash2, Pencil, CheckCircle2,
   XCircle, Loader2, Server, FileText, Clock3, Settings2, Wifi, HardDrive, Link2,
-  Eye, X, Users, Table2, Calculator, Undo2, IdCard
+  Eye, X, Users, Table2, Calculator, Undo2, IdCard, TriangleAlert, Download
 } from 'lucide-react';
 
 const STATUS_COLOR = {
@@ -79,14 +79,19 @@ export default function DataSources() {
   const [rosterName, setRosterName] = useState('');
   const [rosterPreview, setRosterPreview] = useState(null);
   const [rosterBusy, setRosterBusy] = useState(false);
-  // Department / shift labels the roster CSV may use
-  const [setup, setSetup] = useState({ departments: [], shifts: [] });
+  // First-time-onboarding guardrail: pending rows waiting for an explicit confirm
+  const [rosterGate, setRosterGate] = useState(null);
+  const [rosterAck, setRosterAck] = useState(false);
+  // Department / shift labels the roster CSV may use + how many staff already exist
+  const [setup, setSetup] = useState({ departments: [], shifts: [], employeeCount: 0 });
 
   const loadAll = useCallback(() => {
     fetch('/api/v1/ingestion/sources').then(r => r.json()).then(d => { if (d.success) setSources(d.sources); }).catch(() => {});
     fetch('/api/v1/ingestion/summary').then(r => r.json()).then(d => { if (d.success) setSummary(d.summary); }).catch(() => {});
     fetch('/api/v1/ingestion/logs?limit=30').then(r => r.json()).then(d => { if (d.success) setLogs(d.logs); }).catch(() => {});
-    fetch('/api/v1/ingestion/setup').then(r => r.json()).then(d => { if (d.success) setSetup({ departments: d.departments || [], shifts: d.shifts || [] }); }).catch(() => {});
+    fetch('/api/v1/ingestion/setup').then(r => r.json()).then(d => {
+      if (d.success) setSetup({ departments: d.departments || [], shifts: d.shifts || [], employeeCount: Number(d.employeeCount) || 0 });
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -380,10 +385,42 @@ export default function DataSources() {
       if (!parsed) { notify('That file looks empty', true); setRosterRows(null); return; }
       if (parsed.error) { notify(parsed.error, true); setRosterRows(null); return; }
       if (!parsed.rows.length) { notify('No data rows found', true); setRosterRows(null); return; }
+      // Guardrail: bulk upload is meant for first-time onboarding only.
+      if (setup.employeeCount > 0 && !rosterAck) {
+        setRosterGate(parsed.rows);
+        return;
+      }
       setRosterRows(parsed.rows);
     } catch (err) {
       notify(`Could not read CSV: ${err.message}`, true);
       setRosterRows(null);
+    } finally {
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const confirmRosterGate = () => {
+    setRosterRows(rosterGate);
+    setRosterAck(true);
+    setRosterGate(null);
+  };
+
+  const downloadRosterTemplate = async () => {
+    setBusy('TEMPLATE');
+    try {
+      const res = await fetch('/api/v1/ingestion/roster/template');
+      if (!res.ok) { notify('Template download failed', true); return; }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'myHR_Employee_Master_Template.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      notify('Master template downloaded — fill it in and upload it back');
+    } catch (err) {
+      notify(`Template download failed: ${err.message}`, true);
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -859,7 +896,20 @@ export default function DataSources() {
                 <X size={13} /> Clear
               </button>
             )}
+            {canEdit && (
+              <button className="island-btn" onClick={downloadRosterTemplate} disabled={busy === 'TEMPLATE'}>
+                <span className="icon-orb">{busy === 'TEMPLATE' ? <Loader2 size={13} className="spin" /> : <Download size={13} />}</span>
+                Master template
+              </button>
+            )}
           </div>
+
+          {canEdit && setup.employeeCount > 0 && (
+            <p style={{ fontSize: '0.72rem', color: 'var(--brand-amber)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <TriangleAlert size={13} /> {setup.employeeCount} employee(s) already on file — bulk upload is for first-time
+              onboarding; add or edit individual staff in the Employees panel.
+            </p>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
             <button
@@ -1022,6 +1072,38 @@ export default function DataSources() {
           onClose={() => { if (!uploading) setPreview(null); }}
           onConfirm={performImport}
         />
+      )}
+
+      {rosterGate && (
+        <div className="modal-overlay" onClick={() => { setRosterGate(null); setRosterName(''); }}>
+          <div className="modal-card" style={{ width: '100%', maxWidth: '30rem', padding: 0 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-head" style={{ padding: '1rem 1.25rem' }}>
+              <div>
+                <span className="eyebrow" style={{ color: 'var(--brand-amber)' }}>First-time onboarding check</span>
+                <h3 style={{ margin: 0 }}>Bulk roster upload?</h3>
+              </div>
+              <button className="icon-btn" onClick={() => { setRosterGate(null); setRosterName(''); }}><X size={17} /></button>
+            </div>
+            <div style={{ padding: '1rem 1.25rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+              <div style={{ display: 'flex', gap: '0.625rem', alignItems: 'flex-start' }}>
+                <TriangleAlert size={17} style={{ color: 'var(--brand-amber)', flex: 'none', marginTop: 2 }} />
+                <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>
+                  This path is meant for <strong>first-time onboarding</strong>. {setup.employeeCount} employee
+                  {setup.employeeCount === 1 ? '' : 's'} already {setup.employeeCount === 1 ? 'exists' : 'exist'} in the
+                  directory, so a bulk file can create duplicates or overwrite department / shift / salary values —
+                  rows whose Biometric ID or Employee Code is already taken by someone else will be skipped with an error.
+                  For one-off changes, use the <strong>Employees</strong> admin panel instead.
+                </p>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button className="island-btn" onClick={() => { setRosterGate(null); setRosterName(''); }}>Cancel</button>
+                <button className="island-btn is-active" onClick={confirmRosterGate}>
+                  <UploadCloud size={13} /> Continue with {rosterGate.length} row{rosterGate.length === 1 ? '' : 's'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {rosterPreview && (

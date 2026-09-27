@@ -3,6 +3,7 @@
 // (API sync, SQL import, ATTLOG import) produces consistent master data.
 const crypto = require('crypto');
 const { db } = require('../db/database');
+const { employeeCodeOrFallback } = require('./employeeCodeService');
 
 // Deterministic database IDs derived from external identifiers
 function slugId(prefix, value) {
@@ -44,11 +45,22 @@ async function ensureEmployee({ biometricUserId, fullName }, createEmployees, co
     throw new Error('Cannot auto-create employee: no department/shift configured. Configure shifts & departments first.');
   }
   const name = fullName || `Imported Employee ${biometricUserId}`;
+  // Configured ID format wins; legacy IMP- code is the fallback. Never crash
+  // a whole batch on a collision — surface a row-level, holder-naming error.
+  let code = await employeeCodeOrFallback(`IMP-${biometricUserId}`);
+  let taken = await db.get('SELECT full_name FROM employees WHERE employee_code = ?', code);
+  if (taken && code !== `IMP-${biometricUserId}`) {
+    code = `IMP-${biometricUserId}`;
+    taken = await db.get('SELECT full_name FROM employees WHERE employee_code = ?', code);
+  }
+  if (taken) {
+    throw new Error(`Employee code ${code} is already assigned to ${taken.full_name}`);
+  }
   // employees.first_name is NOT NULL; use the full name as first name for auto-created staff.
   await db.run(`
     INSERT INTO employees (id, employee_code, biometric_user_id, first_name, full_name, designation, department_id, shift_id, gender, date_of_joining, base_ctc, role, status)
     VALUES (?, ?, ?, ?, ?, 'Imported Employee', ?, ?, 'Other', ?, 0, 'EMPLOYEE', 'ACTIVE')
-  `, id, `IMP-${biometricUserId}`, biometricUserId, name, name, departmentId, shiftId, new Date().toISOString().slice(0, 10));
+  `, id, code, biometricUserId, name, name, departmentId, shiftId, new Date().toISOString().slice(0, 10));
   counters.employeesCreated += 1;
   if (counters.createdNames) counters.createdNames.push(name);
   if (counters.createdEmployeeIds) counters.createdEmployeeIds.push(id);

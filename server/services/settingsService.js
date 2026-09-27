@@ -6,7 +6,7 @@ const config = require('../config');
 const SETTINGS_FIELDS = [
   'name', 'address', 'gstin', 'registration_no', 'contact_person',
   'industry_label', 'tagline', 'director_name', 'director_title',
-  'contact_phone', 'contact_email'
+  'contact_phone', 'contact_email', 'emp_code_prefix', 'emp_code_padding'
 ];
 
 function defaultSettings() {
@@ -21,7 +21,9 @@ function defaultSettings() {
     director_name: 'Management',
     director_title: 'Managing Director',
     contact_phone: '',
-    contact_email: ''
+    contact_email: '',
+    emp_code_prefix: '',
+    emp_code_padding: 4
   };
 }
 
@@ -35,6 +37,9 @@ async function getSettings() {
     const v = row[f];
     out[f] = (v === null || v === undefined || String(v).trim() === '') ? defaults[f] : v;
   }
+  // Padding must always be a sane integer regardless of what a form stored.
+  const pad = parseInt(out.emp_code_padding, 10);
+  out.emp_code_padding = Number.isFinite(pad) ? Math.min(6, Math.max(3, pad)) : 4;
   return out;
 }
 

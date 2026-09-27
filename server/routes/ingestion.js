@@ -348,7 +348,34 @@ router.get('/setup', async (req, res) => {
   try {
     const departments = await db.all('SELECT id, name, code FROM departments ORDER BY name');
     const shifts = await db.all('SELECT id, name, start_time, duration_hours FROM shifts ORDER BY name');
-    return res.json({ success: true, departments, shifts });
+    const empCount = await db.get(`SELECT count(*)::int AS c FROM employees WHERE status = 'ACTIVE'`);
+    return res.json({ success: true, departments, shifts, employeeCount: empCount ? empCount.c : 0 });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 12b. Master sheet template for first-time onboarding (bulk employee upload).
+router.get('/roster/template', requirePerm('SETTINGS_EDIT'), async (req, res) => {
+  try {
+    const departments = await db.all('SELECT name FROM departments ORDER BY name');
+    const shifts = await db.all('SELECT name FROM shifts ORDER BY name');
+    const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [
+      ['Biometric ID*', 'Employee Code', 'Full Name*', 'Gender', 'Department', 'Designation', 'Shift', 'Date of Joining', 'Base CTC', 'Email', 'Mobile'],
+      ['1024', '', 'Anita Sharma', 'Female', (departments[0] || {}).name || '', 'Staff Nurse', (shifts[0] || {}).name || '', '2026-01-15', '18000', 'anita@example.com', '9876543210'],
+      [],
+      ['# Biometric ID* = numeric user number from the attendance device (required to create a new employee).'],
+      ['# Employee Code may be left blank - the system allocates the next number in the configured format.'],
+      ['# Department and Shift must exactly match names configured in the app. Date format: YYYY-MM-DD.'],
+      ['# Rows matching an existing employee (by Biometric ID or Employee Code) update safe fields only.'],
+      [`# Valid departments: ${departments.map(d => d.name).join(' | ') || '(none yet)'}`],
+      [`# Valid shifts: ${shifts.map(s => s.name).join(' | ') || '(none yet)'}`]
+    ];
+    const csv = '\uFEFF' + lines.map(r => r.map(esc).join(',')).join('\r\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="myHR_Employee_Master_Template.csv"');
+    return res.send(csv);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

@@ -111,6 +111,13 @@ if (!process.env.VERCEL) {
       console.error('Database migration failed:', e.message);
       process.exit(1);
     });
+} else {
+  // Serverless boot (Vercel): schema_v2.sql is fully idempotent (IF NOT EXISTS /
+  // ADD COLUMN IF NOT EXISTS), so best-effort apply it on a cold instance without
+  // blocking the request. Guaranteed path is `node server/scripts/migrateV2.js`.
+  migrate()
+    .then(() => console.log('✔ Schema ensured on cold start'))
+    .catch((e) => console.warn('⚠ Cold-start schema check failed:', e.message));
 }
 
 module.exports = app;

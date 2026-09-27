@@ -46,6 +46,20 @@ function resolveDutyDate(employee, shift, punchDate) {
   }
 }
 
+/**
+ * Minutes the last-out punch fell BEFORE the scheduled shift end.
+ * Returns 0 when the employee left at/after shift end or data is missing.
+ * Cross-midnight shifts (e.g. 20:00-08:00) end on the day after duty_date.
+ */
+function computeEarlyMinutes(dutyDate, lastOut, shift) {
+  if (!lastOut || !shift || !shift.end_time) return 0;
+  const [eh, em] = shift.end_time.split(':').map(Number);
+  let shiftEnd = new Date(`${dutyDate}T${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}:00`);
+  if (shift.is_cross_midnight && eh <= 12) shiftEnd.setDate(shiftEnd.getDate() + 1);
+  const diff = Math.floor((shiftEnd - new Date(lastOut)) / 60000);
+  return diff > 0 ? diff : 0;
+}
+
 async function ingestPunch({ deviceId, biometricUserId, punchTime, verificationMode = 'FINGERPRINT', inOutMode = 'AUTO', importBatch = null, sourceId = null }) {
   const punchDate = new Date(punchTime || new Date().toISOString());
   const punchIso = punchDate.toISOString();
@@ -118,6 +132,7 @@ async function ingestPunch({ deviceId, biometricUserId, punchTime, verificationM
   }
 
   const overtimeHours = totalHours > shift.duration_hours ? Math.round((totalHours - shift.duration_hours) * 10) / 10 : 0;
+  const earlyMinutes = computeEarlyMinutes(dutyDate, lastOut, shift);
 
   let status = 'PRESENT';
   if (totalHours < config.ATTENDANCE_RULES.HALF_DAY_MIN_HOURS) {
@@ -133,14 +148,14 @@ async function ingestPunch({ deviceId, biometricUserId, punchTime, verificationM
   if (attendance) {
     await db.run(`
       UPDATE attendance_records
-      SET first_in_time = ?, last_out_time = ?, total_hours = ?, late_minutes = ?, overtime_hours = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+      SET first_in_time = ?, last_out_time = ?, total_hours = ?, late_minutes = ?, undertime_minutes = ?, overtime_hours = ?, status = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, firstIn, lastOut, totalHours, lateMinutes, overtimeHours, status, attendance.id);
+    `, firstIn, lastOut, totalHours, lateMinutes, earlyMinutes, overtimeHours, status, attendance.id);
   } else {
     await db.run(`
-      INSERT INTO attendance_records (id, duty_date, employee_id, shift_id, first_in_time, last_out_time, total_hours, late_minutes, overtime_hours, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, attendanceId, dutyDate, employee.id, shift.id, firstIn, lastOut, totalHours, lateMinutes, overtimeHours, status);
+      INSERT INTO attendance_records (id, duty_date, employee_id, shift_id, first_in_time, last_out_time, total_hours, late_minutes, undertime_minutes, overtime_hours, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, attendanceId, dutyDate, employee.id, shift.id, firstIn, lastOut, totalHours, lateMinutes, earlyMinutes, overtimeHours, status);
   }
 
   // Notify the employee when overtime is classified (dedup: once per employee/day).
@@ -225,6 +240,7 @@ async function recomputeAttendance({ from = null, to = null, employeeIds = null 
       const expected = new Date(`${dutyDate}T${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}:00`);
       let lateMinutes = firstIn > expected ? Math.max(0, Math.floor((firstIn - expected) / 60000)) : 0;
       const overtimeHours = totalHours > shift.duration_hours ? Math.round((totalHours - shift.duration_hours) * 10) / 10 : 0;
+      const earlyMinutes = computeEarlyMinutes(dutyDate, lastOut.toISOString(), shift);
       let status = 'PRESENT';
       if (totalHours < HALF) status = 'ABSENT';
       else if (totalHours < FULL) status = 'HALF_DAY';
@@ -235,15 +251,15 @@ async function recomputeAttendance({ from = null, to = null, employeeIds = null 
       if (existing) {
         await db.run(`
           UPDATE attendance_records
-          SET shift_id = ?, first_in_time = ?, last_out_time = ?, total_hours = ?, late_minutes = ?, overtime_hours = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+          SET shift_id = ?, first_in_time = ?, last_out_time = ?, total_hours = ?, late_minutes = ?, undertime_minutes = ?, overtime_hours = ?, status = ?, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
-        `, shift.id, firstIn.toISOString(), lastOut.toISOString(), totalHours, lateMinutes, overtimeHours, status, existing.id);
+        `, shift.id, firstIn.toISOString(), lastOut.toISOString(), totalHours, lateMinutes, earlyMinutes, overtimeHours, status, existing.id);
       } else {
         const id = `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
         await db.run(`
-          INSERT INTO attendance_records (id, duty_date, employee_id, shift_id, first_in_time, last_out_time, total_hours, late_minutes, overtime_hours, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, id, dutyDate, employee.id, shift.id, firstIn.toISOString(), lastOut.toISOString(), totalHours, lateMinutes, overtimeHours, status);
+          INSERT INTO attendance_records (id, duty_date, employee_id, shift_id, first_in_time, last_out_time, total_hours, late_minutes, undertime_minutes, overtime_hours, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, id, dutyDate, employee.id, shift.id, firstIn.toISOString(), lastOut.toISOString(), totalHours, lateMinutes, earlyMinutes, overtimeHours, status);
       }
       result.daysWritten += 1;
     }
@@ -269,5 +285,6 @@ module.exports = {
   ingestPunch,
   resolveDutyDate,
   generatePunchHash,
-  recomputeAttendance
+  recomputeAttendance,
+  computeEarlyMinutes
 };

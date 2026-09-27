@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 function pad(n) { return String(n).padStart(2, '0'); }
 function toStr(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 
-function getRange(mode) {
+export function getRange(mode) {
   const now = new Date();
   const y = now.getFullYear();
   const m = now.getMonth();

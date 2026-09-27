@@ -12,6 +12,7 @@
 const crypto = require('crypto');
 const { db } = require('../db/database');
 const { defaultShiftId, defaultDepartmentId } = require('./importerHelpers');
+const { employeeCodeOrFallback } = require('./employeeCodeService');
 
 function slugId(prefix, value) {
   return `${prefix}_${crypto.createHash('sha1').update(String(value)).digest('hex').slice(0, 10)}`;
@@ -117,6 +118,9 @@ async function analyzeRoster(rows, { apply = false } = {}) {
       status: ''
     };
 
+    // Silently skip the guidance rows that ship with the master template.
+    if (row.biometricUserId.startsWith('#') && !row.fullName && !row.employeeCode) continue;
+
     // Nothing to key on: a roster row must identify an employee somehow.
     if (!row.biometricUserId && !row.employeeCode && !row.email) {
       preview.status = 'Error: no key';
@@ -171,7 +175,18 @@ async function analyzeRoster(rows, { apply = false } = {}) {
         const departmentId = (dept && dept.id) || (await defaultDepartmentId());
         const shiftId = (shift && shift.id) || (await defaultShiftId());
         const name = row.fullName || `Staff #${row.biometricUserId}`;
-        const code = row.employeeCode || `IMP-${row.biometricUserId}`;
+        // Row-level uniqueness guard: a duplicate code names its holder instead of
+        // crashing the whole batch with a raw SQL constraint error.
+        let code = row.employeeCode || await employeeCodeOrFallback(`IMP-${row.biometricUserId}`);
+        let holder = await db.get('SELECT full_name FROM employees WHERE employee_code = ?', code);
+        if (holder && code !== `IMP-${row.biometricUserId}`) {
+          code = `IMP-${row.biometricUserId}`;
+          holder = await db.get('SELECT full_name FROM employees WHERE employee_code = ?', code);
+        }
+        if (holder) {
+          preview.status = `Error: ${code} already assigned to ${holder.full_name}`;
+          summary.willCreate -= 1; summary.errors += 1; out.push(preview); continue;
+        }
         await db.run(`
           INSERT INTO employees (id, employee_code, biometric_user_id, first_name, full_name, designation, department_id, shift_id, gender, date_of_joining, base_ctc, email, mobile, role, status)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'EMPLOYEE', 'ACTIVE')

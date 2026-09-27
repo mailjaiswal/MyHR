@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS organizations (
   director_title TEXT DEFAULT 'Managing Director',
   contact_phone TEXT,
   contact_email TEXT,
+  emp_code_prefix TEXT DEFAULT '',
+  emp_code_padding INTEGER DEFAULT 4,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -467,3 +469,10 @@ CREATE INDEX IF NOT EXISTS idx_punches_batch ON biometric_punches (import_batch)
 ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS created_employee_ids TEXT DEFAULT '[]';
 ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS created_device_ids TEXT DEFAULT '[]';
 ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS reverted_at TIMESTAMPTZ;
+
+-- ============================================================
+-- V3: Employee ID format config + early-leave (undertime) store
+-- ============================================================
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS emp_code_prefix TEXT DEFAULT '';
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS emp_code_padding INTEGER DEFAULT 4;
+ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS undertime_minutes INTEGER DEFAULT 0;
