@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import useEscapeClose from '../hooks/useEscapeClose';
+import { shiftColor } from '../utils/shiftColors';
 import { X, Printer, ChevronLeft, ChevronRight, FileText, Users, AlertTriangle } from 'lucide-react';
 
 const MONTH_NAMES = [
@@ -35,6 +36,7 @@ export default function RosterPrintModal({ shifts = [], employees = [], org = nu
     const rows = shifts.map((shift, idx) => ({
       shift,
       order: idx + 1,
+      color: shiftColor(shift, idx, false),
       staff: employees.filter(e => e.shift_id === shift.id),
     }));
     const unassigned = employees.filter(e => !e.shift_id || !shifts.some(s => s.id === e.shift_id));
@@ -49,7 +51,7 @@ export default function RosterPrintModal({ shifts = [], employees = [], org = nu
   const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   const buildA4Document = () => {
-    const sections = grouped.rows.map(({ shift, order, staff }) => {
+    const sections = grouped.rows.map(({ shift, order, staff, color }) => {
       const body = staff.length
         ? staff.map(emp => `
             <tr>
@@ -62,8 +64,8 @@ export default function RosterPrintModal({ shifts = [], employees = [], org = nu
         : `<tr><td colspan="5" class="empty">No staff assigned to this shift for this period.</td></tr>`;
       return `
         <section class="shift-block">
-          <div class="shift-head">
-            <span class="shift-no">${order}</span>
+          <div class="shift-head" style="border-left-color:${color}; background:${color}14;">
+            <span class="shift-no" style="background:${color};">${order}</span>
             <span class="shift-name">${esc(shift.name)}</span>
             <span class="shift-time">${esc(shiftLabelFor(shift))}</span>
             <span class="shift-count">${staff.length} staff</span>
@@ -220,12 +222,15 @@ export default function RosterPrintModal({ shifts = [], employees = [], org = nu
 
         {/* Preview */}
         <div style={{ padding: '1.25rem 1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {grouped.rows.map(({ shift, order, staff }) => (
-            <div key={shift.id} className="swaniki-card" style={{ padding: '1rem 1.25rem', borderLeft: '3px solid var(--brand-primary)' }}>
+          {grouped.rows.map(({ shift, order, staff, color }) => (
+            <div key={shift.id} className="swaniki-card" style={{ padding: '1rem 1.25rem', borderLeft: `4px solid ${color}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: staff.length ? '0.6rem' : '0.2rem' }}>
-                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-heading)' }}>{order}. {shift.name}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }} />
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-heading)' }}>{order}. {shift.name}</span>
+                </span>
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }} className="mono">{shiftLabelFor(shift)}</span>
-                <span className="pill-badge pill-emerald" style={{ fontSize: '0.625rem', marginLeft: 'auto' }}>{staff.length} staff</span>
+                <span style={{ fontSize: '0.625rem', marginLeft: 'auto', fontWeight: 700, padding: '0.2rem 0.55rem', borderRadius: '999px', color: 'var(--text-heading)', background: `${color}1f`, border: `1px solid ${color}66` }}>{staff.length} staff</span>
               </div>
               {staff.length ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>

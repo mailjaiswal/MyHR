@@ -7,7 +7,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import { rampAt } from '../utils/chartPalette';
+import { shiftColor, overlapColor, withAlpha } from '../utils/shiftColors';
 
 /* Renders the real 24h coverage from the org's configured shifts and the staff
    actually assigned to each. Everything here is derived from live data - no mock
@@ -55,7 +55,7 @@ export default function Shift24HourTimeline({ shifts = [], employees = [], loadi
       startLabel: (s.start_time || '').slice(0, 5),
       endLabel: (s.end_time || '').slice(0, 5),
       duration: s.duration_hours,
-      color: rampAt(i, isDark),
+      color: shiftColor(s, i, isDark),
       staffCount: staff.length,
       names: staff.map((e) => ({ id: e.id, name: e.full_name, role: e.designation, dept: e.department_name })),
       segments: segmentsFor(start, end, crossMidnight),
@@ -73,6 +73,20 @@ export default function Shift24HourTimeline({ shifts = [], employees = [], loadi
   const uncoveredHours = covered.filter((c) => c === 0).length;
   const overlapHours = covered.filter((c) => c >= 2).length;
   const totalAssigned = employees.filter((e) => e.shift_id).length;
+
+  // Turn the hour-by-hour overlap flags into continuous left/width bands on the
+  // 0-24 track, so handover windows render as one clean bar instead of blocks.
+  const overlapBands = [];
+  for (let h = 0; h < 24; ) {
+    if (covered[h] >= 2) {
+      const start = h;
+      while (h < 24 && covered[h] >= 2) h++;
+      overlapBands.push({ left: (start / 24) * 100, width: ((h - start) / 24) * 100 });
+    } else {
+      h++;
+    }
+  }
+  const oColor = overlapColor(isDark);
 
   return (
     <div className="swaniki-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -145,8 +159,9 @@ export default function Shift24HourTimeline({ shifts = [], employees = [], loadi
                       width: `${seg.width}%`,
                       top: 0,
                       height: '100%',
-                      background: `${r.color}22`,
+                      background: withAlpha(r.color, 0.15),
                       border: `1.5px solid ${r.color}`,
+                      borderLeft: `4px solid ${r.color}`,
                       borderRadius: '0.625rem',
                       display: 'flex',
                       alignItems: 'center',
@@ -160,6 +175,7 @@ export default function Shift24HourTimeline({ shifts = [], employees = [], loadi
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                      <span style={{ width: 9, height: 9, borderRadius: 3, background: r.color, flexShrink: 0 }} />
                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-heading)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {r.name}
                       </span>
@@ -169,14 +185,57 @@ export default function Shift24HourTimeline({ shifts = [], employees = [], loadi
                         </span>
                       )}
                     </div>
-                    <span style={{ flexShrink: 0, fontSize: '0.6875rem', fontWeight: 600, color: 'var(--brand-primary-ink)', background: 'var(--bg-surface)', padding: '0.15rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                      <Users size={11} /> {r.staffCount}
+                    <span style={{ flexShrink: 0, fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-heading)', background: 'var(--bg-surface)', border: `1px solid ${withAlpha(r.color, 0.5)}`, padding: '0.15rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <Users size={11} color={r.color} /> {r.staffCount}
                     </span>
                   </div>
                 ))}
               </div>
             ))}
+
+            {/* Dedicated overlap lane: hours where 2+ shifts run concurrently */}
+            {overlapBands.length > 0 && (
+              <div style={{ position: 'relative', height: '26px', marginTop: '0.25rem', paddingTop: '4px' }}>
+                <div style={{ position: 'absolute', left: 0, top: 4, bottom: 0, display: 'flex', alignItems: 'center', zIndex: 1 }}>
+                  <span style={{ fontSize: '0.62rem', fontWeight: 700, color: oColor, whiteSpace: 'nowrap', background: 'var(--bg-surface-subtle)', paddingRight: '6px' }}>⟶ Overlap</span>
+                </div>
+                {overlapBands.map((b, bi) => (
+                  <div
+                    key={bi}
+                    title={`${overlapHours}h of shift handover overlap`}
+                    style={{
+                      position: 'absolute',
+                      left: `${b.left}%`,
+                      width: `${b.width}%`,
+                      top: 4,
+                      height: 18,
+                      background: withAlpha(oColor, 0.22),
+                      border: `1.5px dashed ${oColor}`,
+                      borderRadius: '0.4rem',
+                    }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
+        </div>
+      )}
+
+      {/* Colour legend */}
+      {rows.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem 1rem', alignItems: 'center', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+          {rows.map((r) => (
+            <span key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ width: 11, height: 11, borderRadius: 3, background: withAlpha(r.color, 0.25), border: `1.5px solid ${r.color}` }} />
+              {r.name}
+            </span>
+          ))}
+          {overlapHours > 0 && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginLeft: 'auto' }}>
+              <span style={{ width: 11, height: 11, borderRadius: 3, background: withAlpha(oColor, 0.22), border: `1.5px dashed ${oColor}` }} />
+              Overlap ({overlapHours}h)
+            </span>
+          )}
         </div>
       )}
 

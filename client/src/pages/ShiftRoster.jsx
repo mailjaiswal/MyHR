@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useOrganization } from '../context/OrganizationContext';
+import { useTheme } from '../context/ThemeContext';
+import { shiftColor, withAlpha } from '../utils/shiftColors';
 import { Clock, ShieldCheck, AlertCircle, Moon, Sun, Sunrise, Sunset, Edit3, Save, X, Check, Calendar, Settings2, RefreshCw, FileDown } from 'lucide-react';
 import Shift24HourTimeline from '../components/Shift24HourTimeline';
 import RosterPrintModal from '../components/RosterPrintModal';
 
 export default function ShiftRoster({ onNavigate }) {
   const { org } = useOrganization();
+  const { isDark } = useTheme();
   const { authFetch: fetch, hasPerm } = useAuth();
   const [shifts, setShifts] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -16,7 +19,8 @@ export default function ShiftRoster({ onNavigate }) {
     start_time: '',
     end_time: '',
     duration_hours: 8.0,
-    is_cross_midnight: 0
+    is_cross_midnight: 0,
+    color_code: '#047857'
   });
   const [saveStatus, setSaveStatus] = useState(null);
   const [busyEmp, setBusyEmp] = useState(null);
@@ -44,11 +48,11 @@ export default function ShiftRoster({ onNavigate }) {
     loadData();
   }, []);
 
-  const getShiftIcon = (name) => {
-    if (name.includes('Morning')) return <Sunrise size={18} color="var(--brand-primary-ink)" />;
-    if (name.includes('Evening')) return <Sunset size={18} color="var(--brand-primary-ink)" />;
-    if (name.includes('Night')) return <Moon size={18} color="var(--brand-primary-ink)" />;
-    return <Sun size={18} color="var(--brand-primary-ink)" />;
+  const getShiftIcon = (name, color = 'var(--brand-primary-ink)') => {
+    if (name.includes('Morning')) return <Sunrise size={18} color={color} />;
+    if (name.includes('Evening')) return <Sunset size={18} color={color} />;
+    if (name.includes('Night')) return <Moon size={18} color={color} />;
+    return <Sun size={18} color={color} />;
   };
 
   const handleStartEdit = (shift) => {
@@ -58,7 +62,8 @@ export default function ShiftRoster({ onNavigate }) {
       start_time: shift.start_time,
       end_time: shift.end_time,
       duration_hours: shift.duration_hours,
-      is_cross_midnight: shift.is_cross_midnight
+      is_cross_midnight: shift.is_cross_midnight,
+      color_code: shift.color_code || '#047857'
     });
     setSaveStatus(null);
   };
@@ -86,6 +91,7 @@ export default function ShiftRoster({ onNavigate }) {
   const isSuperAdmin = hasPerm('ROSTER_EDIT');
   const canAssign = hasPerm('EMPLOYEES_EDIT');
   const shiftById = Object.fromEntries(shifts.map(s => [s.id, s]));
+  const shiftColorById = Object.fromEntries(shifts.map((s, i) => [s.id, shiftColor(s, i, isDark)]));
 
   const changeEmployeeShift = async (empId, shiftId) => {
     setBusyEmp(empId);
@@ -236,11 +242,12 @@ export default function ShiftRoster({ onNavigate }) {
 
       {/* Shifts Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
-        {shifts.map(shift => {
+        {shifts.map((shift, idx) => {
           const isEditing = editingShift === shift.id;
+          const color = shiftColor(shift, idx, isDark);
 
           return (
-            <div key={shift.id} className="swaniki-card" style={{ padding: '1.5rem', position: 'relative' }}>
+            <div key={shift.id} className="swaniki-card" style={{ padding: '1.5rem', position: 'relative', borderLeft: `4px solid ${color}`, background: `linear-gradient(90deg, ${withAlpha(color, isDark ? 0.1 : 0.06)}, var(--bg-surface) 120px)` }}>
               {isEditing ? (
                 /* Inline Edit Form for Super Admin */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -311,6 +318,19 @@ export default function ShiftRoster({ onNavigate }) {
                     </div>
                   </div>
 
+                  <div>
+                    <label style={{ fontSize: '0.6875rem', color: 'var(--text-caption)', fontWeight: 700 }}>SHIFT COLOUR</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                      <input
+                        type="color"
+                        value={/^#[0-9a-fA-F]{6}$/.test(editForm.color_code) ? editForm.color_code : '#047857'}
+                        onChange={(e) => setEditForm({ ...editForm, color_code: e.target.value })}
+                        style={{ width: 40, height: 34, padding: 2, borderRadius: 8, border: '1px solid var(--border-color)', background: 'transparent', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8125rem', color: 'var(--text-body)' }}>{editForm.color_code}</span>
+                    </div>
+                  </div>
+
                   <button
                     onClick={() => handleSaveShift(shift.id)}
                     className="btn-swaniki btn-swaniki-primary"
@@ -325,19 +345,20 @@ export default function ShiftRoster({ onNavigate }) {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      {getShiftIcon(shift.name)}
+                      {getShiftIcon(shift.name, color)}
                       <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-heading)' }}>
                         {shift.name}
                       </h3>
                     </div>
                     {shift.is_cross_midnight === 1 && (
-                      <span className="pill-badge pill-indigo" style={{ fontSize: '0.625rem' }}>
-                        Cross-Midnight
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.625rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '9999px', color: 'var(--text-heading)', background: withAlpha(color, isDark ? 0.18 : 0.1), border: `1px solid ${withAlpha(color, 0.45)}` }}>
+                        <span style={{ width: 6, height: 6, borderRadius: 9999, background: color }} /> Cross-Midnight
                       </span>
                     )}
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.375rem', marginBottom: '0.5rem' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: color, alignSelf: 'center', flexShrink: 0 }} />
                     <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.35rem', fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--brand-primary-ink)' }}>
                       {shift.start_time} – {shift.end_time}
                     </span>
@@ -349,7 +370,7 @@ export default function ShiftRoster({ onNavigate }) {
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.75rem' }}>
                     <p>Full Day Threshold: <strong style={{ color: 'var(--text-heading)' }}>≥ 7.45 hrs</strong></p>
                     <p>Half Day Minimum: <strong style={{ color: 'var(--text-heading)' }}>3.45 hrs</strong></p>
-                    <p>Assigned Staff: <strong style={{ color: 'var(--brand-primary-ink)' }}>
+                    <p style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}><span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />Assigned Staff: <strong style={{ color: 'var(--text-heading)' }}>
                       {employees.filter(e => e.shift_id === shift.id).length} staff members
                     </strong></p>
                   </div>
@@ -399,8 +420,9 @@ export default function ShiftRoster({ onNavigate }) {
             <tbody>
               {employees.map(emp => {
                 const isSneha = emp.full_name?.includes('Sneha Goswami');
+                const rowColor = shiftColorById[emp.shift_id];
                 return (
-                  <tr key={emp.id} style={{ background: isSneha ? 'var(--brand-primary-light)' : undefined }}>
+                  <tr key={emp.id} style={{ background: isSneha ? 'var(--brand-primary-light)' : undefined, boxShadow: rowColor ? `inset 3px 0 0 ${rowColor}` : undefined }}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <strong style={{ color: 'var(--text-heading)' }}>{emp.full_name}</strong>
@@ -427,9 +449,11 @@ export default function ShiftRoster({ onNavigate }) {
                           {shifts.map(sh => <option key={sh.id} value={sh.id}>{sh.name}</option>)}
                         </select>
                       ) : (
-                        <span className={`pill-badge ${emp.shift_name?.includes('Night') ? 'pill-indigo' : 'pill-emerald'}`}>
-                          {emp.shift_name || '—'}
-                        </span>
+                        emp.shift_name ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.6875rem', fontWeight: 600, padding: '0.2rem 0.55rem', borderRadius: '9999px', color: 'var(--text-heading)', background: withAlpha(rowColor || '#64748b', isDark ? 0.18 : 0.1), border: `1px solid ${withAlpha(rowColor || '#64748b', 0.4)}` }}>
+                            <span style={{ width: 7, height: 7, borderRadius: 9999, background: rowColor || 'var(--text-muted)' }} /> {emp.shift_name}
+                          </span>
+                        ) : '—'
                       )}
                     </td>
                     <td className="mono" style={{ color: 'var(--text-muted)' }}>
