@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import useEscapeClose from '../hooks/useEscapeClose';
 import {
@@ -12,12 +11,11 @@ import {
   CheckCircle2,
   Building2,
   Table,
-  Sparkles,
+  FileSearch,
   Layers
 } from 'lucide-react';
 
 export default function CustomReportModal({ isOpen, onClose }) {
-  const { isDark } = useTheme();
   const { user } = useAuth();
 
   const [reportType, setReportType] = useState('MUSTER');
@@ -136,7 +134,7 @@ export default function CustomReportModal({ isOpen, onClose }) {
       background: 'rgba(0, 0, 0, 0.7)',
       backdropFilter: 'blur(8px)',
       WebkitBackdropFilter: 'blur(8px)',
-      zIndex: 110,
+      zIndex: 'var(--z-modal)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -168,7 +166,7 @@ export default function CustomReportModal({ isOpen, onClose }) {
         }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-              <FileText size={20} color="var(--brand-primary)" />
+              <FileText size={20} color="var(--brand-primary-ink)" />
               <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
                 Executive Custom Report Generator
               </h2>
@@ -257,10 +255,10 @@ export default function CustomReportModal({ isOpen, onClose }) {
                       fontWeight: 500,
                       border: '1px solid var(--border-color)',
                       background: durationPreset === p.id
-                        ? (isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)')
+                        ? 'var(--brand-primary)'
                         : 'var(--bg-surface)',
                       color: durationPreset === p.id
-                        ? (isDark ? '#0a0c10' : '#ffffff')
+                        ? 'var(--on-primary)'
                         : 'var(--text-body)',
                       cursor: 'pointer'
                     }}
@@ -349,14 +347,12 @@ export default function CustomReportModal({ isOpen, onClose }) {
               style={{
                 padding: '0.625rem 1.5rem',
                 fontSize: '0.875rem',
-                background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)',
-                color: isDark ? '#0a0c10' : '#ffffff',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '0.5rem'
               }}
             >
-              <Sparkles size={16} />
+              <FileSearch size={16} />
               <span>{isGenerating ? 'Compiling Report...' : 'Generate Audit Report'}</span>
             </button>
           </div>
@@ -413,15 +409,15 @@ export default function CustomReportModal({ isOpen, onClose }) {
                 </div>
                 <div style={{ padding: '0.75rem', background: 'var(--bg-surface-subtle)', borderRadius: '0.5rem' }}>
                   <div style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }}>Total Shift Punches</div>
-                  <div style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--brand-primary)' }}>{generatedReport.summary.totalShifts}</div>
+                  <div style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--brand-primary-ink)' }}>{generatedReport.summary.totalShifts}</div>
                 </div>
                 <div style={{ padding: '0.75rem', background: 'var(--bg-surface-subtle)', borderRadius: '0.5rem' }}>
                   <div style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }}>Overtime Logged</div>
-                  <div style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--brand-amber)' }}>{generatedReport.summary.totalOTHours}</div>
+                  <div style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--warning-ink)' }}>{generatedReport.summary.totalOTHours}</div>
                 </div>
                 <div style={{ padding: '0.75rem', background: 'var(--bg-surface-subtle)', borderRadius: '0.5rem' }}>
                   <div style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }}>Total EPF Contribution</div>
-                  <div style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--brand-cyan)' }}>{generatedReport.summary.totalEPF}</div>
+                  <div style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--brand-primary-ink)' }}>{generatedReport.summary.totalEPF}</div>
                 </div>
               </div>
 
@@ -447,10 +443,10 @@ export default function CustomReportModal({ isOpen, onClose }) {
                           {row.name}
                         </td>
                         <td style={{ padding: '0.6rem 0.8rem', color: 'var(--text-body)' }}>{row.dept}</td>
-                        <td style={{ padding: '0.6rem 0.8rem', color: 'var(--brand-primary)', fontWeight: 600 }}>{row.daysPresent}d</td>
-                        <td style={{ padding: '0.6rem 0.8rem', color: 'var(--brand-amber)' }}>{row.daysHalf}d</td>
+                        <td style={{ padding: '0.6rem 0.8rem', color: 'var(--brand-primary-ink)', fontWeight: 600 }}>{row.daysPresent}d</td>
+                        <td style={{ padding: '0.6rem 0.8rem', color: 'var(--warning-ink)' }}>{row.daysHalf}d</td>
                         <td style={{ padding: '0.6rem 0.8rem', fontWeight: 600 }}>{row.totalHours}</td>
-                        <td style={{ padding: '0.6rem 0.8rem', color: 'var(--brand-rose)' }}>{row.otHours}</td>
+                        <td style={{ padding: '0.6rem 0.8rem', color: 'var(--danger-ink)' }}>{row.otHours}</td>
                         <td style={{ padding: '0.6rem 0.8rem' }}>{row.epfDeduction}</td>
                         <td style={{ padding: '0.6rem 0.8rem', fontWeight: 600, color: 'var(--text-heading)' }}>{row.netPay}</td>
                       </tr>

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useTheme } from '../context/ThemeContext';
 import { useOrganization } from '../context/OrganizationContext';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -23,7 +22,6 @@ const mapSettings = (s) => ({
 });
 
 export default function CompanySettings() {
-  const { isDark } = useTheme();
   const { currentRole } = useAuth();
   const { org, refreshOrg } = useOrganization();
   const [form, setForm] = useState(emptyForm);
@@ -71,7 +69,7 @@ export default function CompanySettings() {
 
   const inputStyle = {
     width: '100%',
-    background: isDark ? '#0d0f13' : '#f8fafc',
+    background: 'var(--bg-surface-subtle)',
     border: '1px solid var(--border-color)',
     borderRadius: '0.5rem',
     padding: '0.55rem 0.75rem',
@@ -81,8 +79,8 @@ export default function CompanySettings() {
   };
 
   const labelStyle = {
-    fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-caption)',
-    textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem', display: 'block'
+    fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-caption)',
+    letterSpacing: '0.005em', marginBottom: '0.3rem', display: 'block'
   };
 
   const fieldGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' };
@@ -94,8 +92,8 @@ export default function CompanySettings() {
           <span className="pill-badge pill-indigo" style={{ fontSize: '0.6875rem' }}>GENERIC PRODUCT</span>
           <span className="eyebrow-italic">Company Identity & Branding</span>
         </div>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.03em' }}>
-          Company <em style={{ fontStyle: 'italic', color: isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)' }}>Settings</em>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-heading)', letterSpacing: '-0.03em' }}>
+          Company <em className="highlight-italic">Settings</em>
         </h1>
         <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
           These details drive every branded surface — the app title in the sidebar & top bar, payslip letterhead,
@@ -104,7 +102,7 @@ export default function CompanySettings() {
       </div>
 
       {currentRole !== 'SUPER_ADMIN' && (
-        <div style={{ padding: '0.75rem 1rem', borderRadius: '0.75rem', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', fontSize: '0.8125rem', color: '#f59e0b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ padding: '0.75rem 1rem', borderRadius: '0.75rem', background: 'rgba(180,83,9,0.10)', border: '1px solid rgba(180,83,9,0.26)', fontSize: '0.8125rem', color: 'var(--warning-ink)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <XCircle size={16} /> Only a Super Admin can edit company settings.
         </div>
       )}
@@ -112,10 +110,10 @@ export default function CompanySettings() {
       {(message || error) && (
         <div style={{
           padding: '0.75rem 1rem', borderRadius: '0.75rem',
-          background: error ? 'rgba(244, 63, 94, 0.12)' : 'rgba(16, 185, 129, 0.12)',
-          border: `1px solid ${error ? 'rgba(244,63,94,0.3)' : 'rgba(16,185,129,0.3)'}`,
+          background: error ? 'rgba(185, 28, 28, 0.10)' : 'var(--brand-primary-light)',
+          border: `1px solid ${error ? 'rgba(185,28,28,0.26)' : 'rgba(4,120,87,0.28)'}`,
           display: 'flex', alignItems: 'center', gap: '0.5rem',
-          fontSize: '0.8125rem', color: error ? '#f43f5e' : '#10b981', fontWeight: 600
+          fontSize: '0.8125rem', color: error ? 'var(--danger-ink)' : 'var(--brand-primary-ink)', fontWeight: 600
         }}>
           {error ? <XCircle size={16} /> : <CheckCircle2 size={16} />}
           <span>{error || message}</span>
@@ -123,12 +121,12 @@ export default function CompanySettings() {
       )}
 
       <form onSubmit={handleSave} style={{
-        background: isDark ? '#111318' : '#ffffff', border: '1px solid var(--border-color)', borderRadius: '0.875rem',
+        background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: '0.875rem',
         display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '1.5rem'
       }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-heading)', marginBottom: '1rem' }}>
-            <Building2 size={16} color="#6366f1" /> Company Identity
+            <Building2 size={16} color="var(--brand-primary-ink)" /> Company Identity
           </div>
           <div style={fieldGrid}>
             <div>
@@ -160,7 +158,7 @@ export default function CompanySettings() {
 
         <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-heading)', marginBottom: '1rem' }}>
-            <UserCog size={16} color="#10b981" /> Signatories & Contact
+            <UserCog size={16} color="var(--brand-primary-ink)" /> Signatories & Contact
           </div>
           <div style={fieldGrid}>
             <div>
@@ -188,7 +186,7 @@ export default function CompanySettings() {
 
         <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-heading)', marginBottom: '0.35rem' }}>
-            <Hash size={16} color="#f59e0b" /> Employee ID Format
+            <Hash size={16} color="var(--brand-primary-ink)" /> Employee ID Format
           </div>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 1rem', maxWidth: '46rem' }}>
             Used for every <b>new</b> employee — created from the admin panel or auto-created by device/CSV imports.
@@ -214,11 +212,11 @@ export default function CompanySettings() {
               />
             </div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-caption)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Next code looks like</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-caption)', letterSpacing: '0.005em' }}>Next code looks like</span>
               <span className="mono" style={{
-                fontSize: '0.9375rem', fontWeight: 700, color: 'var(--brand-primary)',
-                background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.28)',
-                borderRadius: '999px', padding: '0.25rem 0.8rem'
+                fontSize: '0.9375rem', fontWeight: 700, color: 'var(--brand-primary-ink)',
+                background: 'var(--brand-primary-light)', border: '1px solid rgba(16,185,129,0.28)',
+                borderRadius: '0.5rem', padding: '0.25rem 0.8rem'
               }}>
                 {(form.emp_code_prefix || 'E') + '0'.repeat(Math.max(0, Math.min(6, Math.max(3, Number(form.emp_code_padding) || 4)) - 1)) + '1'}
               </span>
@@ -236,8 +234,8 @@ export default function CompanySettings() {
             className="btn-swaniki"
             style={{
               padding: '0.6rem 1.4rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem',
-              cursor: 'pointer', background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)',
-              color: isDark ? '#0a0c10' : '#ffffff', display: 'flex', alignItems: 'center', gap: '0.4rem'
+              cursor: 'pointer', background: 'var(--brand-primary)',
+              color: 'var(--on-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem'
             }}
             disabled={saving || !loaded}
           >

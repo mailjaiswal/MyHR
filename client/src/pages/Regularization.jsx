@@ -72,7 +72,7 @@ export default function Regularization() {
         </div>
       </div>
 
-      {msg && <div className="demo-banner" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>{msg}</div>}
+      {msg && <div className="demo-banner" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'var(--brand-primary-light)', color: 'var(--brand-primary-ink)' }}>{msg}</div>}
 
       <div className="seg" style={{ alignSelf: 'flex-start' }}>
         {FILTERS.map(f => (

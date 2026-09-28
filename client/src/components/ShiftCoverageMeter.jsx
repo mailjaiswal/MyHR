@@ -1,21 +1,25 @@
 import React from 'react';
 import { CheckCircle2, AlertTriangle, ShieldCheck, HeartPulse, Activity, Syringe, Building2, Users } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { rampAt } from '../utils/chartPalette';
 
-// Static fallback ward data — used when backend hasn't returned deptStats yet
+// Static fallback ward data — used when backend hasn't returned deptStats yet.
+// Identity colour comes from the single-hue ramp (index order), never a new accent.
 const FALLBACK_DEPTS = [
-  { id: 1, name: 'ICU Ward',           icon: HeartPulse, color: '#00f2fe', present_count: 4, min_staff_required: 4 },
-  { id: 2, name: 'Emergency Casualty', icon: Activity,   color: '#f43f5e', present_count: 3, min_staff_required: 3 },
-  { id: 3, name: 'Operation OT',       icon: Syringe,    color: '#8b5cf6', present_count: 3, min_staff_required: 3 },
-  { id: 4, name: 'Inpatient Wards',    icon: Building2,  color: '#10b981', present_count: 4, min_staff_required: 6 },
-  { id: 5, name: 'Out-Patient (OPD)',  icon: Users,      color: '#f59e0b', present_count: 2, min_staff_required: 4 },
+  { id: 1, name: 'ICU Ward',           icon: HeartPulse, present_count: 4, min_staff_required: 4 },
+  { id: 2, name: 'Emergency Casualty', icon: Activity,   present_count: 3, min_staff_required: 3 },
+  { id: 3, name: 'Operation OT',       icon: Syringe,    present_count: 3, min_staff_required: 3 },
+  { id: 4, name: 'Inpatient Wards',    icon: Building2,  present_count: 4, min_staff_required: 6 },
+  { id: 5, name: 'Out-Patient (OPD)',  icon: Users,      present_count: 2, min_staff_required: 4 },
 ];
 
 export default function ShiftCoverageMeter({ deptStats, style }) {
+  const { isDark } = useTheme();
   const wards = (deptStats && deptStats.length > 0) ? deptStats.map((d, i) => ({
     ...d,
     icon: FALLBACK_DEPTS[i]?.icon || Building2,
-    color: FALLBACK_DEPTS[i]?.color || '#10b981',
-  })) : FALLBACK_DEPTS;
+    color: rampAt(i, isDark),
+  })) : FALLBACK_DEPTS.map((d, i) => ({ ...d, color: rampAt(i, isDark) }));
 
   const allOk = wards.every(d => d.present_count >= d.min_staff_required);
 
@@ -46,12 +50,12 @@ export default function ShiftCoverageMeter({ deptStats, style }) {
           style={{
             fontSize: '0.625rem',
             padding: '0.15rem 0.55rem',
-            background: allOk ? undefined : 'rgba(239, 68, 68, 0.1)',
-            color: allOk ? undefined : '#ef4444',
+            background: allOk ? undefined : 'var(--brand-rose-light)',
+            color: allOk ? undefined : 'var(--danger-ink)',
             border: allOk ? undefined : '1px solid rgba(239, 68, 68, 0.25)'
           }}
         >
-          {allOk ? <ShieldCheck size={11} /> : <AlertTriangle size={11} color="#ef4444" />}
+          {allOk ? <ShieldCheck size={11} /> : <AlertTriangle size={11} color="var(--danger-ink)" />}
           <span>{allOk ? 'All Wards Safe' : 'Coverage Alert'}</span>
         </span>
       </div>
@@ -59,10 +63,9 @@ export default function ShiftCoverageMeter({ deptStats, style }) {
       {/* Ward rows */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', flex: 1, justifyContent: 'space-between' }}>
         {wards.map(dept => {
-          const WardIcon = dept.icon;
           const isOk = dept.present_count >= dept.min_staff_required;
           const ratio = Math.min(100, Math.round((dept.present_count / dept.min_staff_required) * 100));
-          const accentColor = isOk ? '#10b981' : '#ef4444';
+          const accentColor = isOk ? 'var(--brand-primary-ink)' : 'var(--danger-ink)';
 
           return (
             <div
@@ -99,7 +102,7 @@ export default function ShiftCoverageMeter({ deptStats, style }) {
                     style={{
                       width: `${ratio}%`,
                       background: isOk
-                        ? `linear-gradient(90deg, ${dept.color}, ${dept.color}aa)`
+                        ? dept.color
                         : 'linear-gradient(90deg, #ef4444, #f87171)'
                     }}
                   />
@@ -118,8 +121,8 @@ export default function ShiftCoverageMeter({ deptStats, style }) {
                   on duty
                 </span>
                 {isOk
-                  ? <CheckCircle2 size={13} color="#10b981" />
-                  : <AlertTriangle size={13} color="#ef4444" />
+                  ? <CheckCircle2 size={13} color="var(--brand-primary-ink)" />
+                  : <AlertTriangle size={13} color="var(--danger-ink)" />
                 }
               </div>
             </div>

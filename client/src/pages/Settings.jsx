@@ -431,7 +431,7 @@ export default function Settings({ initialTab, onNavigate }) {
 
   return (
     <div className="page">
-      {msg && <div className="demo-banner" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>{msg}</div>}
+      {msg && <div className="demo-banner" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'var(--brand-primary-light)', color: 'var(--brand-primary-ink)' }}>{msg}</div>}
 
       <div className="page-head">
         <div className="page-title-wrap">
@@ -502,7 +502,7 @@ export default function Settings({ initialTab, onNavigate }) {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                     <span className="eyebrow">Next code looks like</span>
                     <span className="mono" style={{
-                      alignSelf: 'flex-start', fontSize: '0.9375rem', fontWeight: 700, color: 'var(--brand-primary)',
+                      alignSelf: 'flex-start', fontSize: '0.9375rem', fontWeight: 700, color: 'var(--brand-primary-ink)',
                       background: 'var(--brand-primary-light)', border: '1px solid var(--border-color)',
                       borderRadius: '999px', padding: '0.3rem 0.85rem'
                     }}>{nextCodePreview}</span>
@@ -711,7 +711,7 @@ export default function Settings({ initialTab, onNavigate }) {
       {/* ── Tab: Leave Policy ── */}
       {tab === 'leaves' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <div className="demo-banner" style={{ borderColor: 'rgba(245,158,11,.4)', background: 'var(--brand-amber-light)', color: '#b45309' }}>
+          <div className="demo-banner" style={{ borderColor: 'rgba(245,158,11,.4)', background: 'var(--brand-amber-light)', color: 'var(--warning-ink)' }}>
             <CalendarClock size={16} />
             <span>Override the system defaults: edit the yearly allowance of each leave type and push it to all employees, or adjust individual balances below.</span>
           </div>
@@ -802,7 +802,7 @@ export default function Settings({ initialTab, onNavigate }) {
                       </td>
                       <td className="mono">{b.used}</td>
                       <td className="mono">{b.pending}</td>
-                      <td className="mono" style={{ fontWeight: 700, color: 'var(--brand-primary)' }}>{Number(b.accumulated || 0) - Number(b.used || 0) - Number(b.pending || 0)}</td>
+                      <td className="mono" style={{ fontWeight: 700, color: 'var(--brand-primary-ink)' }}>{Number(b.accumulated || 0) - Number(b.used || 0) - Number(b.pending || 0)}</td>
                       <td>
                         <button className="btn btn-ghost btn-sm" disabled={balEdit[b.id] === undefined || busy === b.id} onClick={() => saveBalance(b)}>
                           {busy === b.id ? <Loader2 size={13} className="spin" /> : <Check size={13} />} Save
@@ -827,7 +827,7 @@ export default function Settings({ initialTab, onNavigate }) {
           </div>
 
           {resetResult && (
-            <div className="demo-banner" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
+            <div className="demo-banner" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'var(--brand-primary-light)', color: 'var(--brand-primary-ink)' }}>
               <KeyRound size={16} />
               <span>{resetResult.message} <strong className="mono" style={{ userSelect: 'all' }}>{resetResult.tempPassword}</strong></span>
               <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setResetResult(null)}><X size={14} /></button>
@@ -1086,7 +1086,7 @@ export default function Settings({ initialTab, onNavigate }) {
           {!backup ? <div className="loading-state"><Loader2 size={22} className="spin" /></div> : (
             <>
               {!backup.configured && (
-                <div className="demo-banner" style={{ borderColor: 'rgba(245,158,11,.4)', background: 'var(--brand-amber-light)', color: '#b45309' }}>
+                <div className="demo-banner" style={{ borderColor: 'rgba(245,158,11,.4)', background: 'var(--brand-amber-light)', color: 'var(--warning-ink)' }}>
                   <DatabaseBackup size={16} />
                   <span>Backups are not wired to storage yet. Set <strong>SUPABASE_URL</strong> and <strong>SUPABASE_SERVICE_ROLE_KEY</strong> (and create a private <strong>{backup.bucket}</strong> bucket) on the server to enable off-site dumps.</span>
                 </div>
@@ -1159,9 +1159,9 @@ export default function Settings({ initialTab, onNavigate }) {
 
       {/* Restore confirmation modal */}
       {restoreTarget && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }} onClick={() => setRestoreTarget(null)}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 'var(--z-modal)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }} onClick={() => setRestoreTarget(null)}>
           <div className="section-card" style={{ width: 'min(480px, 100%)', padding: '1.25rem' }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1rem', color: 'var(--brand-rose)' }}>Restore this backup?</h3>
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1rem', color: 'var(--danger-ink)' }}>Restore this backup?</h3>
             <p style={{ fontSize: '0.82rem', marginBottom: '0.75rem' }}>This overwrites <strong>all current data</strong> (employees, attendance, payroll, leaves, audit) with the selected backup. This cannot be undone. Type the backup id below to confirm:</p>
             <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-caption)', marginBottom: '0.4rem', wordBreak: 'break-all' }}>{restoreTarget.id}</div>
             <input className="input" style={{ marginBottom: '0.75rem' }} placeholder="paste backup id to confirm" value={restoreTarget.confirm} onChange={e => setRestoreTarget({ ...restoreTarget, confirm: e.target.value })} />

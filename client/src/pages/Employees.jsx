@@ -39,11 +39,11 @@ function formFromEmployee(e) {
 function AttendanceStats({ a }) {
   if (!a) return <div className="loading-state"><Loader2 size={20} className="spin" /></div>;
   const cards = [
-    ['Present', a.present_days, 'var(--brand-primary)'],
-    ['Half day', a.half_days, 'var(--brand-amber)'],
-    ['Absent', a.absent_days, 'var(--brand-rose)'],
+    ['Present', a.present_days, 'var(--brand-primary-ink)'],
+    ['Half day', a.half_days, 'var(--warning-ink)'],
+    ['Absent', a.absent_days, 'var(--danger-ink)'],
     ['Logged', `${a.total_hours || 0}h`, 'var(--text-heading)'],
-    ['Overtime', `${a.overtime_hours || 0}h`, 'var(--brand-primary)']
+    ['Overtime', `${a.overtime_hours || 0}h`, 'var(--brand-primary-ink)']
   ];
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(104px, 1fr))', gap: '0.75rem' }}>
@@ -325,7 +325,7 @@ export default function Employees() {
 
   return (
     <div className="page">
-      {message && <div className="demo-banner" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>{message}</div>}
+      {message && <div className="demo-banner" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'var(--brand-primary-light)', color: 'var(--brand-primary-ink)' }}>{message}</div>}
 
       <div className="page-head">
         <div className="page-title-wrap">
@@ -455,7 +455,7 @@ export default function Employees() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
                   <span className="avatar-sq" style={{ width: '3.25rem', height: '3.25rem', fontSize: '1.25rem' }}>{emp.full_name?.charAt(0)}</span>
                   <div style={{ minWidth: 0 }}>
-                    <span className="eyebrow" style={{ color: 'var(--brand-primary)' }}>{emp.designation || 'Employee'} · {emp.department_name}</span>
+                    <span className="eyebrow" style={{ color: 'var(--brand-primary-ink)' }}>{emp.designation || 'Employee'} · {emp.department_name}</span>
                     <h2 style={{ margin: '0.2rem 0 0.1rem', fontSize: '1.375rem' }}>{emp.full_name}</h2>
                     <span className="mono" style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }}>
                       {emp.employee_code}{emp.biometric_user_id ? ` · Bio ID ${emp.biometric_user_id}` : ''}{emp.shift_name ? ` · ${emp.shift_name}` : ''}
@@ -538,7 +538,7 @@ export default function Employees() {
                             <td className="mono">{p.month_year}</td>
                             <td className="mono">₹{Number(p.gross_earnings || 0).toLocaleString('en-IN')}</td>
                             <td className="mono">₹{Number(p.total_deductions || 0).toLocaleString('en-IN')}</td>
-                            <td className="mono" style={{ fontWeight: 600, color: 'var(--brand-primary)' }}>₹{Number(p.net_salary || 0).toLocaleString('en-IN')}</td>
+                            <td className="mono" style={{ fontWeight: 600, color: 'var(--brand-primary-ink)' }}>₹{Number(p.net_salary || 0).toLocaleString('en-IN')}</td>
                           </tr>
                         ))}
                         {(!detail.payrollHistory || detail.payrollHistory.length === 0) && (

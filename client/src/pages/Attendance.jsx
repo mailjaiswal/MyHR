@@ -138,7 +138,7 @@ function ViewGate({ onPick }) {
               onClick={() => onPick(o.mode)}
             >
               <div className="bezel-inner">
-                <span className="icon-orb" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
+                <span className="icon-orb" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary-ink)' }}>
                   <o.Icon size={15} />
                 </span>
                 <span className="view-tile-label">{o.label}</span>
@@ -182,8 +182,8 @@ function DayTeamCards({ records, onSelect, onDrill }) {
               <span className="cal-metric" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <b>{Number(r.total_hours || 0).toFixed(1)}h</b>
                 {Number(r.overtime_hours || 0) > 0 && <span>OT {Number(r.overtime_hours).toFixed(1)}h</span>}
-                {Number(r.late_minutes || 0) > 0 && <span style={{ color: 'var(--brand-amber)' }}>+{r.late_minutes}m late</span>}
-                {early != null && early > 0 && <span style={{ color: 'var(--brand-rose)' }}>-{early}m early</span>}
+                {Number(r.late_minutes || 0) > 0 && <span style={{ color: 'var(--warning-ink)' }}>+{r.late_minutes}m late</span>}
+                {early != null && early > 0 && <span style={{ color: 'var(--danger-ink)' }}>-{early}m early</span>}
               </span>
               <button
                 className="island-btn anim-fade-in"
@@ -297,7 +297,7 @@ function MusterTable({ records, busy, canManage, showEarly, onRegularize, onAdju
                   <tr onClick={() => toggle(g.key)} style={{ cursor: 'pointer', background: 'var(--bg-surface-subtle)' }}>
                     <td className="mono" style={{ whiteSpace: 'nowrap', color: 'var(--text-heading)', fontWeight: 600 }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-                        {isOpen ? <Minus size={15} style={{ color: 'var(--brand-primary)' }} /> : <Plus size={15} style={{ color: 'var(--brand-primary)' }} />}
+                        {isOpen ? <Minus size={15} style={{ color: 'var(--brand-primary-ink)' }} /> : <Plus size={15} style={{ color: 'var(--brand-primary-ink)' }} />}
                         {g.rows.length} {g.rows.length === 1 ? 'day' : 'days'}
                       </span>
                     </td>
@@ -406,7 +406,7 @@ function ExportMenu({ canExport, busy, onPick }) {
         <ArrowUpRight size={12} style={{ transform: 'rotate(90deg)', opacity: 0.5 }} />
       </button>
       {open && (
-        <div className="crp-popover bezel-card anim-fade-in" style={{ position: 'absolute', top: 'calc(100% + 0.5rem)', right: 0, zIndex: 60, width: '15rem', ...clampStyle }}>
+        <div className="crp-popover bezel-card anim-fade-in" style={{ position: 'absolute', top: 'calc(100% + 0.5rem)', right: 0, zIndex: 'var(--z-popover)', width: '15rem', ...clampStyle }}>
           <div className="bezel-inner" style={{ padding: '0.5rem' }}>
             <span className="eyebrow" style={{ display: 'block', padding: '0.25rem 0.5rem' }}>Current filters · all rows</span>
             {[
@@ -744,7 +744,7 @@ export default function Attendance() {
   /* ---------- render ---------- */
   return (
     <div className="page">
-      {message && <div className="demo-banner" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>{message}</div>}
+      {message && <div className="demo-banner" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'var(--brand-primary-light)', color: 'var(--brand-primary-ink)' }}>{message}</div>}
 
       <div className="page-head">
         <div className="page-title-wrap">
@@ -830,7 +830,7 @@ export default function Attendance() {
                             </div>
                           </td>
                           <td className="mono">{new Date(c.duty_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
-                          <td className="mono">{Number(c.logged_hours || c.original_hours || 0).toFixed(1)}h → <b style={{ color: 'var(--brand-primary)' }}>{Number(c.requested_hours).toFixed(1)}h</b></td>
+                          <td className="mono">{Number(c.logged_hours || c.original_hours || 0).toFixed(1)}h → <b style={{ color: 'var(--brand-primary-ink)' }}>{Number(c.requested_hours).toFixed(1)}h</b></td>
                           <td className="mono">{c.shift_name}</td>
                           <td className="td-wrap" style={{ maxWidth: 220 }}>{c.reason || '—'}</td>
                           <td><span className={`status-pill ${st.cls}`}>{st.label}</span></td>
@@ -1044,8 +1044,8 @@ export default function Attendance() {
         const otH = rows.reduce((s, r) => s + Number(r.overtime_hours || 0), 0);
         const lateCount = rows.filter(r => Number(r.late_minutes || 0) > 0).length;
         const chips = [
-          ['Present', present, 'var(--brand-primary)'], ['Half day', half, 'var(--brand-amber)'], ['Absent', absent, 'var(--brand-rose)'],
-          ['Late', lateCount, 'var(--text-heading)'], ['Hours', `${totalH.toFixed(1)}h`, 'var(--brand-primary)'], ['Overtime', `${otH.toFixed(1)}h`, 'var(--brand-primary)']
+          ['Present', present, 'var(--brand-primary-ink)'], ['Half day', half, 'var(--warning-ink)'], ['Absent', absent, 'var(--danger-ink)'],
+          ['Late', lateCount, 'var(--text-heading)'], ['Hours', `${totalH.toFixed(1)}h`, 'var(--brand-primary-ink)'], ['Overtime', `${otH.toFixed(1)}h`, 'var(--brand-primary-ink)']
         ];
         return (
           <div className="modal-overlay" onClick={() => setDetail(null)}>

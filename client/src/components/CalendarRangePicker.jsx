@@ -76,7 +76,7 @@ export default function CalendarRangePicker({ from, to, onApply, onClose }) {
   const canApply = sel.start && sel.end;
 
   return (
-    <div ref={ref} className="crp-popover bezel-card" style={{ position: 'absolute', top: 'calc(100% + 0.5rem)', left: 0, zIndex: 60, width: 'min(92vw, 540px)', ...clampStyle }}>
+    <div ref={ref} className="crp-popover bezel-card" style={{ position: 'absolute', top: 'calc(100% + 0.5rem)', left: 0, zIndex: 'var(--z-popover)', width: 'min(92vw, 540px)', ...clampStyle }}>
       <div className="bezel-inner" style={{ padding: '1rem 1.125rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
           <span className="eyebrow">Pick start &amp; end date</span>

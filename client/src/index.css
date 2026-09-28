@@ -1,14 +1,19 @@
 /* ==========================================================================
    myHR by Swaniki - Enterprise Design System (Light / Dark Minimalist Theme)
-   Inspired by award-winning HR & Productivity suites (Rippling, Gusto, Linear)
+   One accent (emerald) + a single-hue data ramp. Amber = caution, rose = fault.
    ========================================================================== */
 
 :root, [data-theme="light"] {
   --font-sans: 'Poppins', 'Inter', system-ui, -apple-system, sans-serif;
-  --font-heading: 'Poppins', 'Source Serif 4', system-ui, -apple-system, sans-serif;
-  --font-serif: 'Source Serif 4', 'Times New Roman', Times, Georgia, serif;
+  /* Display role: Space Grotesk - a grotesque with real character (squared
+     terminals, distinctive 'a'/'g'), which keeps page heads and big numbers from
+     looking like default UI text. Body stays on Poppins for legibility. */
+  --font-heading: 'Space Grotesk', 'Poppins', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Space Grotesk', 'Poppins', 'Inter', system-ui, -apple-system, sans-serif;
+  /* Serif is reserved for printed documents (payslip / muster). No webfont download. */
+  --font-serif: Georgia, 'Times New Roman', Times, serif;
 
-  /* Light Canvas & Surface (Marta Buchner Dribbble #25157900) */
+  /* Light Canvas & Surface */
   --bg-canvas: #f4f5f7;
   --bg-surface: #ffffff;
   --bg-surface-subtle: #f8f9fa;
@@ -19,8 +24,8 @@
   /* Borders & Dividers */
   --border-color: #e5e7eb;
   --border-subtle: #f1f3f5;
-  --border-focus: #4f46e5;
-  --border-glow: transparent;
+  --border-focus: #059669;
+  --border-glow: rgba(5, 150, 105, 0.16);
 
   /* Typography */
   --text-heading: #0f172a;
@@ -28,28 +33,61 @@
   --text-muted: #475569;
   --text-caption: #64748b;
 
-  /* Brand & Status Accents */
+  /* Brand & Status Accents - one accent, plus ink variants that clear AA as text */
   --brand-primary: #10b981;
   --brand-primary-hover: #059669;
   --brand-primary-light: #ecfdf5;
   --brand-primary-glow: rgba(16, 185, 129, 0.15);
+  --brand-primary-ink: #047857;
+  --on-primary: #04231a;
 
-  --brand-indigo: #4f46e5;
-  --brand-indigo-light: #eef2ff;
-  --brand-cyan: #0284c7;
-  --brand-cyan-light: #e0f2fe;
+  /* Single-hue ramp - the only "chart palette" this app has */
+  --data-1: #064e3b;
+  --data-2: #047857;
+  --data-3: #0d9488;
+  --data-4: #10b981;
+  --data-5: #34d399;
+  --data-6: #6ee7b7;
+  --data-7: #a7f3d0;
+
+  /* Legacy aliases re-pointed into the ramp so old call sites collapse to one hue */
+  --brand-indigo: #047857;
+  --brand-indigo-light: #ecfdf5;
+  --brand-cyan: #0d9488;
+  --brand-cyan-light: #f0fdfa;
   --brand-amber: #f59e0b;
   --brand-amber-light: #fffbeb;
+  --warning-ink: #b45309;
   --brand-rose: #ef4444;
   --brand-rose-light: #fef2f2;
-  --brand-blue: #3b82f6;
-  --brand-blue-light: #eff6ff;
+  --danger-ink: #b91c1c;
+  --brand-blue: #0d9488;
+  --brand-blue-light: #f0fdfa;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 16px -2px rgba(15, 23, 42, 0.05), 0 2px 4px -1px rgba(15, 23, 42, 0.03);
-  --shadow-lg: 0 12px 28px -4px rgba(15, 23, 42, 0.08), 0 4px 8px -2px rgba(15, 23, 42, 0.03);
-  --shadow-card-hover: 0 14px 32px -4px rgba(15, 23, 42, 0.09);
+  /* Shadows - slate-tinted, single light source from above */
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 16px -2px rgba(15, 23, 42, 0.06), 0 2px 4px -1px rgba(15, 23, 42, 0.03);
+  --shadow-lg: 0 12px 28px -4px rgba(15, 23, 42, 0.09), 0 4px 8px -2px rgba(15, 23, 42, 0.04);
+  --shadow-card-hover: 0 18px 38px -10px rgba(15, 23, 42, 0.14), 0 4px 10px -4px rgba(6, 78, 59, 0.08);
+
+  /* Elevation grammar: cards carry a hairline ring, not a visible border */
+  --card-ring: 0 0 0 1px rgba(15, 23, 42, 0.07);
+  --card-toplight: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --spot-ring: rgba(5, 150, 105, 0.55);
+
+  /* Ambient depth (fixed page wash + film grain) */
+  --ambient-a: rgba(16, 185, 129, 0.10);
+  --ambient-b: rgba(6, 78, 59, 0.06);
+  --grain-opacity: 0.028;
+
+  /* Z scale - no more magic numbers */
+  --z-sticky: 40;
+  --z-nav: 50;
+  --z-drawer: 55;
+  --z-popover: 60;
+  --z-modal: 1000;
+  --z-grain: 1200;
+  --z-splash: 1300;
 
   /* Glass & Table Effects */
   --glass-card: rgba(255, 255, 255, 0.98);
@@ -59,7 +97,7 @@
 }
 
 [data-theme="dark"] {
-  /* Dark Canvas & Surface (Ronas IT Dribbble #26327753) */
+  /* Dark Canvas & Surface */
   --bg-canvas: #0a0c10;
   --bg-surface: #121620;
   --bg-surface-subtle: #191f2c;
@@ -67,11 +105,11 @@
   --bg-nav: rgba(10, 12, 16, 0.92);
   --bg-sidebar: #0d1017;
 
-  /* Borders & Glowing Edges */
+  /* Borders & Edges - same emerald identity as light mode, only brighter fills */
   --border-color: rgba(255, 255, 255, 0.08);
   --border-subtle: rgba(255, 255, 255, 0.04);
-  --border-focus: #00f2fe;
-  --border-glow: rgba(0, 242, 254, 0.25);
+  --border-focus: #34d399;
+  --border-glow: rgba(52, 211, 153, 0.22);
 
   /* Typography */
   --text-heading: #ffffff;
@@ -79,28 +117,48 @@
   --text-muted: #98a7bb;
   --text-caption: #7d8ca2;
 
-  /* Neon Accents & Glowing Badges */
-  --brand-primary: #10b981;
-  --brand-primary-hover: #34d399;
-  --brand-primary-light: rgba(16, 185, 129, 0.15);
-  --brand-primary-glow: rgba(16, 185, 129, 0.35);
+  /* Emerald Accents (no second brand colour, no neon) */
+  --brand-primary: #34d399;
+  --brand-primary-hover: #6ee7b7;
+  --brand-primary-light: rgba(52, 211, 153, 0.15);
+  --brand-primary-glow: rgba(52, 211, 153, 0.30);
+  --brand-primary-ink: #6ee7b7;
+  --on-primary: #04231a;
 
-  --brand-indigo: #8b5cf6;
-  --brand-indigo-light: rgba(139, 92, 246, 0.18);
-  --brand-cyan: #00f2fe;
-  --brand-cyan-light: rgba(0, 242, 254, 0.18);
+  --data-1: #022c22;
+  --data-2: #047857;
+  --data-3: #0d9488;
+  --data-4: #10b981;
+  --data-5: #34d399;
+  --data-6: #6ee7b7;
+  --data-7: #a7f3d0;
+
+  --brand-indigo: #6ee7b7;
+  --brand-indigo-light: rgba(52, 211, 153, 0.16);
+  --brand-cyan: #34d399;
+  --brand-cyan-light: rgba(52, 211, 153, 0.16);
   --brand-amber: #fbbf24;
-  --brand-amber-light: rgba(251, 191, 36, 0.18);
+  --brand-amber-light: rgba(251, 191, 36, 0.16);
+  --warning-ink: #fcd34d;
   --brand-rose: #f43f5e;
-  --brand-rose-light: rgba(244, 63, 94, 0.18);
-  --brand-blue: #38bdf8;
-  --brand-blue-light: rgba(56, 189, 248, 0.18);
+  --brand-rose-light: rgba(244, 63, 94, 0.16);
+  --danger-ink: #fda4af;
+  --brand-blue: #34d399;
+  --brand-blue-light: rgba(52, 211, 153, 0.16);
 
-  /* Shadows & Neon Radiance */
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.6);
-  --shadow-lg: 0 16px 36px -4px rgba(0, 0, 0, 0.8);
-  --shadow-card-hover: 0 16px 40px -4px rgba(0, 0, 0, 0.9), 0 0 18px 0 var(--border-glow);
+  /* Shadows - depth from above, same direction as light mode */
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 16px 36px -6px rgba(0, 0, 0, 0.8);
+  --shadow-card-hover: 0 20px 44px -10px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(52, 211, 153, 0.14);
+
+  --card-ring: 0 0 0 1px rgba(255, 255, 255, 0.07);
+  --card-toplight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --spot-ring: rgba(52, 211, 153, 0.5);
+
+  --ambient-a: rgba(6, 78, 59, 0.22);
+  --ambient-b: rgba(15, 23, 42, 0.5);
+  --grain-opacity: 0.05;
 
   /* Glass & Table Effects */
   --glass-card: rgba(18, 22, 32, 0.88);
@@ -121,22 +179,92 @@ body {
   background-color: var(--bg-canvas);
   color: var(--text-body);
   min-height: 100vh;
+  min-height: 100dvh;
   line-height: 1.5;
   transition: background-color 0.25s ease, color 0.25s ease;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+  /* A data product: every digit in the app should align in a column. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "kern" 1;
+}
+
+/* ---- Ambient depth ---------------------------------------------------------
+   Two soft radial washes fixed to the viewport break the flat-vector look,
+   and a 2-3% film grain sits over everything. Both are pointer-events:none,
+   so nothing about interaction changes. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(58rem 40rem at 8% -12%, var(--ambient-a), transparent 62%),
+    radial-gradient(46rem 34rem at 96% 4%, var(--ambient-b), transparent 66%);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-grain);
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 140px 140px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body { scroll-behavior: auto; }
 }
 
 /* Flex-children must be allowed to shrink below their content's intrinsic
    width; otherwise wide tables / the 24h timeline force the layout wider
    than the viewport and the app "goes out of the screen". */
 #root {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 100vw;
   overflow-x: hidden;
   min-width: 0;
+}
+
+/* Keyboard focus that actually shows up - required, not optional */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+}
+/* Inputs already paint their own focus ring; don't double it. */
+.input:focus-visible,
+.input-clean:focus-visible,
+.input-field:focus-visible {
+  outline: none;
+}
+
+/* Keyboard users land on the app, not on 30 nav buttons first */
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  z-index: var(--z-popover);
+  padding: 0.5rem 0.875rem;
+  border-radius: 0 0 0.625rem 0.625rem;
+  background: var(--bg-surface-elevated);
+  color: var(--text-heading);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--shadow-lg);
+  transition: top 0.2s var(--ease-spring);
+}
+.skip-link:focus {
+  top: 0;
 }
 
 .main-content-wrapper {
@@ -156,20 +284,22 @@ body {
 /* Typography Hierarchy - Sharp & Crisp (Reduced Boldness, Editorial Contrast) */
 h1 {
   font-family: var(--font-heading);
-  font-size: 1.875rem;
+  font-size: clamp(1.5rem, 1.12rem + 1.1vw, 2rem);
   font-weight: 600;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.032em;
   color: var(--text-heading);
-  line-height: 1.25;
+  line-height: 1.15;
+  text-wrap: balance;
 }
 
 h2 {
   font-family: var(--font-heading);
-  font-size: 1.375rem;
+  font-size: clamp(1.1875rem, 1.06rem + 0.4vw, 1.375rem);
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.024em;
   color: var(--text-heading);
-  line-height: 1.3;
+  line-height: 1.25;
+  text-wrap: balance;
 }
 
 h3 {
@@ -194,27 +324,64 @@ p {
   color: var(--text-muted);
 }
 
-/* ================= Minimalist Cards & Surfaces ================= */
+/* ================= Minimalist Cards & Surfaces =================
+   Elevation grammar: a card is defined by its shadow + hairline ring, never by a
+   visible 1px border (border+shadow+white is the generic look). */
 .swaniki-card {
+  position: relative;
   background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border: 1px solid transparent;
   border-radius: 1.25rem;
-  box-shadow: var(--shadow-md);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--shadow-md), var(--card-ring), var(--card-toplight);
+  transition: box-shadow 0.35s var(--ease-spring), transform 0.35s var(--ease-spring), border-color 0.2s ease;
   overflow: hidden;
 }
 
 .swaniki-card:hover {
-  box-shadow: var(--shadow-card-hover);
-  border-color: rgba(16, 185, 129, 0.3);
+  /* Resting elevation stays; the spotlight ring is the hover answer. Only real
+     interactive cards lift - panels that jump on hover read as broken. */
+  box-shadow: var(--shadow-md), var(--card-ring), var(--card-toplight);
+}
+
+/* Spotlight ring: a hairline that lights up nearest the cursor. --mx/--my are
+   written by useSpotlight(); without JS the ring simply stays invisible. */
+@media (hover: hover) and (pointer: fine) {
+  .swaniki-card::after,
+  .section-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(13rem 13rem at var(--mx, 50%) var(--my, 0%), var(--spot-ring), transparent 58%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    transition: opacity 0.4s var(--ease-spring);
+  }
+
+  .swaniki-card:hover::after,
+  .section-card:hover::after {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .swaniki-card::after,
+    .section-card::after { transition: none; }
+  }
 }
 
 .swaniki-card-flat, .glass-card {
   background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border: 1px solid transparent;
   border-radius: 1.25rem;
   padding: 1.5rem;
   color: var(--text-body);
+  box-shadow: var(--card-ring), var(--card-toplight);
   transition: all 0.2s ease;
 }
 
@@ -237,7 +404,7 @@ p {
 .highlight-italic {
   font-style: italic;
   font-weight: 700;
-  color: var(--brand-cyan);
+  color: var(--brand-primary-ink);
 }
 
 /* Theme-Adaptive Inputs */
@@ -255,8 +422,8 @@ p {
 }
 
 .input-field:focus {
-  border-color: var(--brand-cyan);
-  box-shadow: 0 0 0 3px rgba(0, 242, 254, 0.15);
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--brand-primary-glow);
 }
 
 /* ================= Modern Pill Badges ================= */
@@ -274,35 +441,35 @@ p {
 
 .pill-emerald {
   background: var(--brand-primary-light);
-  color: var(--brand-primary);
+  color: var(--brand-primary-ink);
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
 .pill-indigo {
   background: var(--brand-indigo-light);
-  color: var(--brand-indigo);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: var(--brand-primary-ink);
+  border: 1px solid rgba(16, 185, 129, 0.28);
 }
 
 .pill-amber {
   background: var(--brand-amber-light);
-  color: var(--brand-amber);
+  color: var(--warning-ink);
   border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 .pill-rose {
   background: var(--brand-rose-light);
-  color: var(--brand-rose);
+  color: var(--danger-ink);
   border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .pill-blue {
   background: var(--brand-blue-light);
-  color: var(--brand-blue);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: var(--brand-primary-ink);
+  border: 1px solid rgba(16, 185, 129, 0.28);
 }
 
-/* ================= Visual Cues for Statistics ================= */
+/* Progress track + fill (single hue; strength comes from the ramp, not the glow) */
 .stat-bar-track {
   width: 100%;
   height: 0.5rem;
@@ -328,7 +495,7 @@ p {
   border-radius: 0.375rem;
 }
 
-/* Circular Neon Progress Gauge (Ronas IT Dribbble #26327753) */
+/* Radial progress gauge (used sparingly; stroke colour is passed in) */
 .circle-gauge-container {
   position: relative;
   display: inline-flex;
@@ -353,7 +520,7 @@ p {
   transition: stroke-dashoffset 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Horizontal Date Strip (Dribbble 24x7 Shift Schedule) */
+/* Horizontal date strip (roster / range picking) */
 .date-strip-item {
   display: flex;
   flex-direction: column;
@@ -369,18 +536,18 @@ p {
 }
 
 .date-strip-item:hover {
-  border-color: var(--brand-cyan);
+  border-color: var(--brand-primary);
 }
 
 .date-strip-item.active {
-  background: var(--brand-cyan);
-  color: #0a0c10;
-  border-color: var(--brand-cyan);
-  box-shadow: 0 4px 12px 0 rgba(0, 242, 254, 0.35);
-  font-weight: 800;
+  background: var(--brand-primary);
+  color: var(--on-primary);
+  border-color: var(--brand-primary);
+  box-shadow: 0 4px 12px 0 var(--brand-primary-glow);
+  font-weight: 700;
 }
 
-/* Dribbble Category Pill */
+/* Category badge (device / source labels) */
 .badge-category {
   font-size: 0.625rem;
   font-weight: 700;
@@ -539,7 +706,7 @@ p {
 
 .btn-swaniki-primary {
   background: var(--brand-primary);
-  color: #ffffff;
+  color: var(--on-primary);
   box-shadow: 0 2px 10px 0 var(--brand-primary-glow);
 }
 
@@ -646,7 +813,7 @@ p {
 }
 
 .interactive-card:hover .drilldown-indicator {
-  color: var(--brand-cyan);
+  color: var(--brand-primary-ink);
   transform: translateX(2px);
 }
 
@@ -715,11 +882,12 @@ p {
     bottom: 0;
     left: 0;
     width: 18rem !important;
-    z-index: 60;
+    z-index: var(--z-popover);
     transform: translateX(-100%);
     transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: var(--shadow-lg);
     height: 100vh !important;
+    height: 100dvh !important;
   }
 
   .sidebar-drawer.drawer-open {
@@ -735,7 +903,7 @@ p {
     background: rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
-    z-index: 55;
+    z-index: var(--z-drawer);
     display: block;
   }
 
@@ -762,6 +930,7 @@ p {
 .app-shell {
   display: flex;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg-canvas);
   width: 100%;
   min-width: 0;
@@ -773,6 +942,7 @@ p {
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-color);
   display: flex;
@@ -823,7 +993,7 @@ p {
   max-width: 100%;
   font-size: 0.6875rem;
   font-weight: 600;
-  color: var(--brand-primary);
+  color: var(--brand-primary-ink);
   background: var(--brand-primary-light);
   border: 1px solid rgba(16, 185, 129, 0.25);
   padding: 0.3rem 0.625rem;
@@ -871,6 +1041,7 @@ p {
 }
 
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.6875rem;
@@ -884,15 +1055,32 @@ p {
   font-weight: 500;
   border-radius: 0.65rem;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.25s var(--ease-spring), color 0.25s var(--ease-spring);
   text-align: left;
 }
 .nav-item:hover { background: var(--bg-surface-subtle); color: var(--text-heading); }
 .nav-item-active {
   background: var(--brand-primary-light);
-  color: var(--brand-primary);
+  color: var(--brand-primary-ink);
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.18);
+}
+/* Leading rule marks the active destination and springs in, so the nav speaks the
+   same motion language as the dossier tab indicator. */
+.nav-item-active::before {
+  content: "";
+  position: absolute;
+  left: -0.375rem;
+  top: 0.4rem;
+  bottom: 0.4rem;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--brand-primary);
+  transform-origin: center;
+  animation: nav-rule-in 0.42s var(--ease-spring) both;
+}
+@keyframes nav-rule-in {
+  from { transform: scaleY(0.2); opacity: 0; }
+  to { transform: scaleY(1); opacity: 1; }
 }
 
 .nav-item-sub { padding: 0.45rem 0.625rem; }
@@ -961,7 +1149,7 @@ p {
   border: 1px solid var(--border-color);
   border-radius: 0.9rem;
   box-shadow: var(--shadow-lg);
-  z-index: 60;
+  z-index: var(--z-popover);
   padding: 0.4rem;
   animation: fadeSlide 0.15s ease;
 }
@@ -970,7 +1158,7 @@ p {
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: var(--z-sticky);
   display: flex;
   align-items: center;
   gap: 0.875rem;
@@ -1019,7 +1207,7 @@ p {
   transition: all 0.15s ease;
   white-space: nowrap;
 }
-.btn-primary { background: var(--brand-primary); color: #fff; box-shadow: 0 6px 16px -6px var(--brand-primary-glow); }
+.btn-primary { background: var(--brand-primary); color: var(--on-primary); box-shadow: 0 6px 16px -6px var(--brand-primary-glow); }
 .btn-primary:hover:not(:disabled) { background: var(--brand-primary-hover); }
 .btn-ghost { background: var(--bg-surface); color: var(--text-body); border-color: var(--border-color); }
 .btn-ghost:hover:not(:disabled) { border-color: var(--text-caption); color: var(--text-heading); }
@@ -1067,7 +1255,7 @@ p {
   border: 1px solid var(--border-color);
   border-radius: 1rem;
   box-shadow: var(--shadow-lg);
-  z-index: 50;
+  z-index: var(--z-nav);
   padding: 0.5rem;
   animation: fadeSlide 0.15s ease;
 }
@@ -1112,27 +1300,28 @@ p {
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; }
 .stat-card {
   background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border: 1px solid transparent;
   border-radius: 1rem;
   padding: 1.125rem 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), var(--card-ring), var(--card-toplight);
 }
-.stat-label { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-caption); display: flex; align-items: center; gap: 0.375rem; }
-.stat-value { font-family: var(--font-heading); font-size: 1.75rem; font-weight: 600; letter-spacing: -0.02em; color: var(--text-heading); line-height: 1.15; }
+.stat-label { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.005em; color: var(--text-caption); display: flex; align-items: center; gap: 0.375rem; }
+.stat-value { font-family: var(--font-heading); font-size: clamp(1.5rem, 1.3rem + 0.6vw, 1.875rem); font-weight: 600; letter-spacing: -0.03em; color: var(--text-heading); line-height: 1.08; font-variant-numeric: tabular-nums; }
 .stat-hint { font-size: 0.6875rem; color: var(--text-caption); }
 
 .stat-card-clickable { cursor: pointer; }
 .stat-card-clickable:hover { border-color: var(--border-focus); box-shadow: var(--shadow-md); }
-.stat-card-clickable:hover .stat-value { color: var(--brand-primary); }
+.stat-card-clickable:hover .stat-value { color: var(--brand-primary-ink); }
 
 .section-card {
+  position: relative;
   background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border: 1px solid transparent;
   border-radius: 1.25rem;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), var(--card-ring), var(--card-toplight);
   overflow: hidden;
 }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.125rem 1.5rem; border-bottom: 1px solid var(--border-subtle); }
@@ -1185,9 +1374,9 @@ p {
   overflow: hidden;
 }
 .status-pill > span { overflow: hidden; text-overflow: ellipsis; }
-.status-ok { background: var(--brand-primary-light); color: var(--brand-primary); border: 1px solid rgba(16, 185, 129, 0.25); }
-.status-warn { background: var(--brand-amber-light); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.3); }
-.status-bad { background: var(--brand-rose-light); color: var(--brand-rose); border: 1px solid rgba(239, 68, 68, 0.25); }
+.status-ok { background: var(--brand-primary-light); color: var(--brand-primary-ink); border: 1px solid rgba(16, 185, 129, 0.25); }
+.status-warn { background: var(--brand-amber-light); color: var(--warning-ink); border: 1px solid rgba(245, 158, 11, 0.3); }
+.status-bad { background: var(--brand-rose-light); color: var(--danger-ink); border: 1px solid rgba(239, 68, 68, 0.25); }
 .status-muted { background: var(--bg-surface-subtle); color: var(--text-muted); border: 1px solid var(--border-color); }
 
 .input {
@@ -1238,7 +1427,7 @@ select.input { appearance: none; }
   justify-content: center;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--brand-primary);
+  color: var(--brand-primary-ink);
   background: var(--brand-primary-light);
   border: 1px solid rgba(16, 185, 129, 0.2);
   flex-shrink: 0;
@@ -1359,7 +1548,7 @@ select.input { appearance: none; }
     gap: 0.625rem;
     position: sticky;
     top: 0;
-    z-index: 40;
+    z-index: var(--z-sticky);
     padding: 0.625rem 0.875rem;
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border-color);
@@ -1390,7 +1579,7 @@ select.input { appearance: none; }
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 50;
+    z-index: var(--z-nav);
     background: var(--bg-surface);
     border-top: 1px solid var(--border-color);
     padding: 0.375rem 0.25rem calc(0.375rem + env(safe-area-inset-bottom));
@@ -1409,7 +1598,7 @@ select.input { appearance: none; }
     cursor: pointer;
     border-radius: 0.6rem;
   }
-  .mbn-item-active { color: var(--brand-primary); }
+  .mbn-item-active { color: var(--brand-primary-ink); }
   .mbn-label { font-size: 0.625rem; font-weight: 600; letter-spacing: 0.01em; }
 
   /* Reduce page chrome so content is less "thin container, endless scroll" */
@@ -1553,7 +1742,7 @@ select.input { appearance: none; }
   color: var(--text-muted);
   margin-bottom: 0.625rem;
 }
-.login-demo-head svg { color: var(--brand-primary); }
+.login-demo-head svg { color: var(--brand-primary-ink); }
 .login-demo-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1629,7 +1818,7 @@ select.input { appearance: none; }
 .modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--z-modal);
   background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
@@ -1684,12 +1873,12 @@ select.input { appearance: none; }
 }
 [data-theme="dark"] .bezel-inner { box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05); }
 
-/* -- Eyebrow micro-label -- */
+/* -- Section eyebrow -- */
 .eyebrow {
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
+  text-transform: none;
+  letter-spacing: 0.005em;
   color: var(--text-caption);
 }
 
@@ -1732,7 +1921,7 @@ select.input { appearance: none; }
 .view-tile-sub { font-size: 0.75rem; color: var(--text-muted); }
 .view-tile-check {
   width: 1.625rem; height: 1.625rem; border-radius: 50%;
-  background: var(--brand-primary); color: #fff;
+  background: var(--brand-primary); color: var(--on-primary);
   display: inline-flex; align-items: center; justify-content: center;
   animation: tile-check-pop 0.45s var(--ease-spring) both;
 }
@@ -1752,7 +1941,7 @@ select.input { appearance: none; }
 }
 .island-btn:hover { background: var(--bg-surface-subtle); box-shadow: var(--shadow-sm); }
 .island-btn:active { transform: scale(0.98); }
-.island-btn.is-active { background: var(--brand-primary-light); color: var(--brand-primary); border-color: transparent; }
+.island-btn.is-active { background: var(--brand-primary-light); color: var(--brand-primary-ink); border-color: transparent; }
 .icon-orb {
   width: 1.5rem; height: 1.5rem; border-radius: 50%; flex: none;
   background: var(--bg-surface-subtle);
@@ -1788,7 +1977,7 @@ select.input { appearance: none; }
 }
 .chip-toggle:hover { background: var(--bg-surface-subtle); }
 .chip-toggle:active { transform: scale(0.96); }
-.chip-toggle.is-on { background: var(--brand-primary-light); color: var(--brand-primary); border-color: transparent; }
+.chip-toggle.is-on { background: var(--brand-primary-light); color: var(--brand-primary-ink); border-color: transparent; }
 .filter-pill {
   display: inline-flex; align-items: center; gap: 0.375rem;
   background: var(--bg-surface-subtle); border: 1px solid var(--border-subtle);
@@ -1942,7 +2131,7 @@ select.input { appearance: none; }
   transition: color 0.3s var(--ease-spring), transform 0.3s var(--ease-spring);
 }
 .dossier-tab:hover { color: var(--text-heading); }
-.dossier-tab.is-active { color: var(--brand-primary); }
+.dossier-tab.is-active { color: var(--brand-primary-ink); }
 .dossier-tab-indicator {
   position: absolute; bottom: 0; left: 0; height: 2px; border-radius: 2px;
   background: var(--brand-primary);
@@ -1962,7 +2151,7 @@ select.input { appearance: none; }
 .crp-day.in-range .crp-band { opacity: 1; }
 .crp-day .crp-num { position: relative; z-index: 1; width: 1.625rem; height: 1.625rem; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; transition: background 0.3s var(--ease-spring), color 0.3s var(--ease-spring), transform 0.3s var(--ease-spring); }
 .crp-day:hover .crp-num { background: var(--bg-surface-subtle); }
-.crp-day.edge .crp-num { background: var(--brand-primary); color: #fff; transform: scale(1.05); }
+.crp-day.edge .crp-num { background: var(--brand-primary); color: var(--on-primary); transform: scale(1.05); }
 .crp-day.other-month { color: var(--text-caption); opacity: 0.5; }
 .crp-day.today .crp-num { box-shadow: inset 0 0 0 1.5px var(--brand-primary); }
 

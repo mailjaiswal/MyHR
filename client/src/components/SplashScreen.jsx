@@ -44,7 +44,7 @@ export default function SplashScreen({ onFinish }) {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 9999,
+      zIndex: 'var(--z-splash)',
       opacity: fadeOut ? 0 : 1,
       transition: 'opacity 0.35s ease',
       pointerEvents: fadeOut ? 'none' : 'all'
@@ -62,7 +62,7 @@ export default function SplashScreen({ onFinish }) {
           width: '4.5rem',
           height: '4.5rem',
           borderRadius: '1.25rem',
-          background: 'linear-gradient(135deg, #10b981, #059669)',
+          background: 'radial-gradient(120% 120% at 22% 18%, #34d399, #047857 72%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -83,7 +83,7 @@ export default function SplashScreen({ onFinish }) {
         {/* Brand Name & Typography */}
         <h1 style={{
           fontSize: '1.75rem',
-          fontWeight: 900,
+          fontWeight: 700,
           letterSpacing: '-0.04em',
           color: 'var(--text-heading)',
           marginBottom: '2rem',
@@ -94,9 +94,9 @@ export default function SplashScreen({ onFinish }) {
           <span>myHR</span>
           <span style={{
             fontSize: '0.75rem',
-            fontWeight: 800,
+            fontWeight: 700,
             background: 'var(--brand-primary)',
-            color: '#fff',
+            color: 'var(--on-primary)',
             padding: '0.15rem 0.5rem',
             borderRadius: '0.375rem',
             letterSpacing: '0.02em'

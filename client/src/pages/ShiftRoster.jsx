@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
 import { useOrganization } from '../context/OrganizationContext';
 import { Clock, ShieldCheck, AlertCircle, Moon, Sun, Sunrise, Sunset, Edit3, Save, X, Check, Calendar, Settings2 } from 'lucide-react';
 import Shift24HourTimeline from '../components/Shift24HourTimeline';
@@ -8,7 +7,6 @@ import Shift24HourTimeline from '../components/Shift24HourTimeline';
 export default function ShiftRoster({ onNavigate }) {
   const { org } = useOrganization();
   const { authFetch: fetch, hasPerm } = useAuth();
-  const { isDark } = useTheme();
   const [shifts, setShifts] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [editingShift, setEditingShift] = useState(null);
@@ -38,10 +36,10 @@ export default function ShiftRoster({ onNavigate }) {
   }, []);
 
   const getShiftIcon = (name) => {
-    if (name.includes('Morning')) return <Sunrise size={18} color="#fbbf24" />;
-    if (name.includes('Evening')) return <Sunset size={18} color="#f97316" />;
-    if (name.includes('Night')) return <Moon size={18} color={isDark ? '#00f2fe' : '#8b5cf6'} />;
-    return <Sun size={18} color="#38bdf8" />;
+    if (name.includes('Morning')) return <Sunrise size={18} color="var(--brand-primary-ink)" />;
+    if (name.includes('Evening')) return <Sunset size={18} color="var(--brand-primary-ink)" />;
+    if (name.includes('Night')) return <Moon size={18} color="var(--brand-primary-ink)" />;
+    return <Sun size={18} color="var(--brand-primary-ink)" />;
   };
 
   const handleStartEdit = (shift) => {
@@ -113,7 +111,7 @@ export default function ShiftRoster({ onNavigate }) {
             <span className="eyebrow-italic">24×7 Workforce Continuity</span>
           </div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-heading)', letterSpacing: '-0.025em' }}>
-            24×7 <em style={{ fontStyle: 'italic', color: isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)' }}>Rotational Shift Roster</em>
+            24×7 <em className="highlight-italic">Rotational Shift Roster</em>
           </h1>
           <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
             Flexible shift configuration for Super Admin with dynamic cross-midnight duty date resolution.
@@ -132,7 +130,7 @@ export default function ShiftRoster({ onNavigate }) {
             </button>
           )}
           {isSuperAdmin && (
-            <span className="pill-badge pill-rose" style={{ padding: '0.35rem 0.75rem' }}>
+            <span className="pill-badge pill-emerald" style={{ padding: '0.35rem 0.75rem' }}>
               SUPER ADMIN SHIFT EDITING ENABLED
             </span>
           )}
@@ -149,7 +147,7 @@ export default function ShiftRoster({ onNavigate }) {
           alignItems: 'center',
           gap: '0.5rem',
           fontSize: '0.8125rem',
-          color: '#10b981',
+          color: 'var(--brand-primary-ink)',
           fontWeight: 600
         }}>
           <Check size={16} />
@@ -158,7 +156,7 @@ export default function ShiftRoster({ onNavigate }) {
       )}
 
       {assignMsg && (
-        <div style={{ padding: '0.6rem 1rem', borderRadius: '0.6rem', background: 'rgba(16, 185, 129, 0.10)', border: '1px solid rgba(16, 185, 129, 0.28)', fontSize: '0.8125rem', color: '#10b981', fontWeight: 600 }}>
+        <div style={{ padding: '0.6rem 1rem', borderRadius: '0.6rem', background: 'var(--brand-primary-light)', border: '1px solid var(--border-color)', fontSize: '0.8125rem', color: 'var(--brand-primary-ink)', fontWeight: 600 }}>
           <Check size={13} style={{ verticalAlign: '-2px', marginRight: '0.35rem' }} />{assignMsg}
         </div>
       )}
@@ -169,14 +167,11 @@ export default function ShiftRoster({ onNavigate }) {
       {/* Threshold Policies Banner */}
       <div className="swaniki-card" style={{
         padding: '1.5rem',
-        background: isDark
-          ? 'linear-gradient(135deg, rgba(0, 242, 254, 0.08), rgba(18, 22, 32, 0.95))'
-          : 'linear-gradient(135deg, rgba(79, 70, 229, 0.05), var(--bg-surface))',
-        border: `1px solid ${isDark ? 'rgba(0, 242, 254, 0.3)' : '#c7d2fe'}`
+        background: 'linear-gradient(135deg, var(--brand-primary-light), var(--bg-surface))'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-          <ShieldCheck size={20} color={isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)'} />
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-heading)' }}>
+          <ShieldCheck size={20} color="var(--brand-primary-ink)" />
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-heading)' }}>
             Active Biometric Threshold Policies
           </h3>
         </div>
@@ -186,26 +181,26 @@ export default function ShiftRoster({ onNavigate }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
           <div style={{ background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: '0.75rem' }}>
-            <span style={{ fontSize: '0.6875rem', color: 'var(--text-caption)', fontWeight: 700, textTransform: 'uppercase' }}>FULL DAY THRESHOLD</span>
-            <p style={{ fontSize: '1.25rem', fontWeight: 900, color: '#10b981', marginTop: '0.25rem' }}>≥ 7.45 Hours</p>
+            <span className="eyebrow">Full day threshold</span>
+            <p style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--brand-primary-ink)', marginTop: '0.25rem' }}>≥ 7.45 Hours</p>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>Full day shift credited (PRESENT)</p>
           </div>
 
           <div style={{ background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: '0.75rem' }}>
-            <span style={{ fontSize: '0.6875rem', color: 'var(--text-caption)', fontWeight: 700, textTransform: 'uppercase' }}>HALF DAY WINDOW</span>
-            <p style={{ fontSize: '1.25rem', fontWeight: 900, color: '#f59e0b', marginTop: '0.25rem' }}>3.45 – 7.44 Hours</p>
+            <span className="eyebrow">Half day window</span>
+            <p style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--warning-ink)', marginTop: '0.25rem' }}>3.45 – 7.44 Hours</p>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>Half day deduction (HALF_DAY)</p>
           </div>
 
           <div style={{ background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: '0.75rem' }}>
-            <span style={{ fontSize: '0.6875rem', color: 'var(--text-caption)', fontWeight: 700, textTransform: 'uppercase' }}>ABSENT CUTOFF</span>
-            <p style={{ fontSize: '1.25rem', fontWeight: 900, color: '#ef4444', marginTop: '0.25rem' }}>&lt; 3.45 Hours</p>
+            <span className="eyebrow">Absent cutoff</span>
+            <p style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--danger-ink)', marginTop: '0.25rem' }}>&lt; 3.45 Hours</p>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>Marked absent (ABSENT)</p>
           </div>
 
           <div style={{ background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: '0.75rem' }}>
-            <span style={{ fontSize: '0.6875rem', color: 'var(--text-caption)', fontWeight: 700, textTransform: 'uppercase' }}>CROSS-MIDNIGHT SHIFT</span>
-            <p style={{ fontSize: '1.25rem', fontWeight: 900, color: isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)', marginTop: '0.25rem' }}>20:00 – 08:00</p>
+            <span className="eyebrow">Cross-midnight shift</span>
+            <p style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-heading)', marginTop: '0.25rem' }}>20:00 – 08:00</p>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>Anchored to duty date without split</p>
           </div>
         </div>
@@ -303,7 +298,7 @@ export default function ShiftRoster({ onNavigate }) {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       {getShiftIcon(shift.name)}
-                      <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-heading)' }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-heading)' }}>
                         {shift.name}
                       </h3>
                     </div>
@@ -315,7 +310,7 @@ export default function ShiftRoster({ onNavigate }) {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.375rem', marginBottom: '0.5rem' }}>
-                    <span style={{ fontSize: '1.35rem', fontWeight: 900, color: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)' }}>
+                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.35rem', fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--brand-primary-ink)' }}>
                       {shift.start_time} – {shift.end_time}
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -326,7 +321,7 @@ export default function ShiftRoster({ onNavigate }) {
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.75rem' }}>
                     <p>Full Day Threshold: <strong style={{ color: 'var(--text-heading)' }}>≥ 7.45 hrs</strong></p>
                     <p>Half Day Minimum: <strong style={{ color: 'var(--text-heading)' }}>3.45 hrs</strong></p>
-                    <p>Assigned Staff: <strong style={{ color: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)' }}>
+                    <p>Assigned Staff: <strong style={{ color: 'var(--brand-primary-ink)' }}>
                       {employees.filter(e => e.shift_id === shift.id).length} staff members
                     </strong></p>
                   </div>
@@ -352,7 +347,7 @@ export default function ShiftRoster({ onNavigate }) {
       <div className="swaniki-card" style={{ overflow: 'hidden' }}>
         <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-heading)' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-heading)' }}>
               {org ? `${org.name} Roster Staff Assignments` : 'Roster Staff Assignments'}
             </h3>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
@@ -377,7 +372,7 @@ export default function ShiftRoster({ onNavigate }) {
               {employees.map(emp => {
                 const isSneha = emp.full_name?.includes('Sneha Goswami');
                 return (
-                  <tr key={emp.id} style={{ background: isSneha ? (isDark ? 'rgba(0, 242, 254, 0.08)' : 'rgba(79, 70, 229, 0.05)') : undefined }}>
+                  <tr key={emp.id} style={{ background: isSneha ? 'var(--brand-primary-light)' : undefined }}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <strong style={{ color: 'var(--text-heading)' }}>{emp.full_name}</strong>

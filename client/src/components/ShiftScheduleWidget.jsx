@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
-import { useTheme } from '../context/ThemeContext';
 import { Calendar, Clock, ChevronLeft, ChevronRight, MoreVertical, FileText, CheckCircle2 } from 'lucide-react';
 
 export default function ShiftScheduleWidget({ onOpenPayslip, onViewMuster }) {
-  const { isDark } = useTheme();
   const [selectedDay, setSelectedDay] = useState(2); // Wednesday (active today)
   const [activeShiftTab, setActiveShiftTab] = useState('active'); // 'active' | 'upcoming' | 'night'
 
@@ -32,7 +30,7 @@ export default function ShiftScheduleWidget({ onOpenPayslip, onViewMuster }) {
       {/* Widget Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-heading)' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-heading)' }}>
             24×7 Shift Schedule
           </h3>
           <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
@@ -65,7 +63,7 @@ export default function ShiftScheduleWidget({ onOpenPayslip, onViewMuster }) {
               }}
             >
               <span style={{ fontSize: '0.6875rem', opacity: 0.8 }}>{item.day}</span>
-              <span style={{ fontSize: '0.9375rem', fontWeight: 800 }}>{item.date}</span>
+              <span style={{ fontSize: '0.9375rem', fontWeight: 700 }}>{item.date}</span>
             </div>
           ))}
         </div>
@@ -91,7 +89,7 @@ export default function ShiftScheduleWidget({ onOpenPayslip, onViewMuster }) {
           style={{
             background: 'transparent',
             border: 'none',
-            borderBottom: activeShiftTab === 'active' ? `2px solid ${isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)'}` : '2px solid transparent',
+            borderBottom: activeShiftTab === 'active' ? '2px solid var(--brand-primary)' : '2px solid transparent',
             color: activeShiftTab === 'active' ? 'var(--text-heading)' : 'var(--text-muted)',
             padding: '0.5rem 0',
             cursor: 'pointer',
@@ -105,7 +103,7 @@ export default function ShiftScheduleWidget({ onOpenPayslip, onViewMuster }) {
           style={{
             background: 'transparent',
             border: 'none',
-            borderBottom: activeShiftTab === 'upcoming' ? `2px solid ${isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)'}` : '2px solid transparent',
+            borderBottom: activeShiftTab === 'upcoming' ? '2px solid var(--brand-primary)' : '2px solid transparent',
             color: activeShiftTab === 'upcoming' ? 'var(--text-heading)' : 'var(--text-muted)',
             padding: '0.5rem 0',
             cursor: 'pointer',
@@ -119,7 +117,7 @@ export default function ShiftScheduleWidget({ onOpenPayslip, onViewMuster }) {
           style={{
             background: 'transparent',
             border: 'none',
-            borderBottom: activeShiftTab === 'night' ? `2px solid ${isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)'}` : '2px solid transparent',
+            borderBottom: activeShiftTab === 'night' ? '2px solid var(--brand-primary)' : '2px solid transparent',
             color: activeShiftTab === 'night' ? 'var(--text-heading)' : 'var(--text-muted)',
             padding: '0.5rem 0',
             cursor: 'pointer',
@@ -137,9 +135,9 @@ export default function ShiftScheduleWidget({ onOpenPayslip, onViewMuster }) {
           style={{
             padding: '1rem',
             borderRadius: '0.875rem',
-            background: isDark ? 'rgba(0, 242, 254, 0.04)' : '#f8fafd',
-            border: isDark ? '1px solid rgba(0, 242, 254, 0.25)' : '1px solid #e0e7ff',
-            boxShadow: isDark ? '0 0 12px 0 rgba(0, 242, 254, 0.1)' : 'none',
+            background: 'var(--brand-primary-light)',
+            border: '1px solid rgba(16, 185, 129, 0.22)',
+            boxShadow: 'none',
             transition: 'all 0.2s ease'
           }}
         >
@@ -151,7 +149,7 @@ export default function ShiftScheduleWidget({ onOpenPayslip, onViewMuster }) {
                 </strong>
                 <span className="live-beacon" style={{ width: '6px', height: '6px' }}></span>
               </div>
-              <p style={{ fontSize: '0.6875rem', color: isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)', fontWeight: 600 }}>
+              <p style={{ fontSize: '0.6875rem', color: 'var(--brand-primary-ink)', fontWeight: 600 }}>
                 Senior ICU In-Charge Staff Nurse
               </p>
             </div>
@@ -168,7 +166,7 @@ export default function ShiftScheduleWidget({ onOpenPayslip, onViewMuster }) {
           <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', margin: '0.5rem 0' }}>
             <span className="badge-category">ICU Care</span>
             <span className="badge-category">eSSL Verified</span>
-            <span className="badge-category" style={{ background: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5', color: '#10b981' }}>
+            <span className="badge-category" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary-ink)' }}>
               Duty Date Anchored
             </span>
           </div>

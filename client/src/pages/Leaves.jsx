@@ -119,7 +119,7 @@ export default function Leaves() {
                   <td className="mono">{b.accumulated}</td>
                   <td className="mono">{b.used}</td>
                   <td className="mono">{b.pending}</td>
-                  <td className="mono" style={{ fontWeight: 700, color: 'var(--brand-primary)' }}>{Number(b.accumulated || 0) - Number(b.used || 0) - Number(b.pending || 0)}</td>
+                  <td className="mono" style={{ fontWeight: 700, color: 'var(--brand-primary-ink)' }}>{Number(b.accumulated || 0) - Number(b.used || 0) - Number(b.pending || 0)}</td>
                 </tr>
               ))}
               {balances.length === 0 && <tr><td colSpan={6}><div className="empty-state"><p>No balances seeded yet.</p></div></td></tr>}
@@ -174,7 +174,7 @@ export default function Leaves() {
       </section>
 
       {showForm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', zIndex: 'var(--z-modal)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <div className="swaniki-card" style={{ width: '100%', maxWidth: 420, padding: '1.5rem', position: 'relative' }}>
             <button className="icon-btn" style={{ position: 'absolute', top: '0.75rem', right: '0.75rem' }} onClick={() => setShowForm(false)}><X size={17} /></button>
             <h3 style={{ marginBottom: '1rem' }}>Apply for leave</h3>

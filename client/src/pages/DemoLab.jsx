@@ -28,7 +28,7 @@ export default function DemoLab({ demoKey }) {
           <DeviceSimulatorModal isOpen onClose={() => setSimOpen(false)} />
         ) : (
           <div className="swaniki-card" style={{ padding: '2.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
-            <Cpu size={34} style={{ color: 'var(--brand-indigo)' }} />
+            <Cpu size={34} style={{ color: 'var(--brand-primary-ink)' }} />
             <h3>Punch-in simulator</h3>
             <p style={{ maxWidth: 420 }}>Simulate a biometric punch against the live backend — pick an employee, device and verification mode.</p>
             <button className="btn btn-primary" onClick={() => setSimOpen(true)}><Cpu size={15} /> Open simulator</button>
@@ -45,7 +45,7 @@ export default function DemoLab({ demoKey }) {
           <CustomReportModal isOpen onClose={() => setReportOpen(false)} />
         ) : (
           <div className="swaniki-card" style={{ padding: '2.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
-            <Table2 size={34} style={{ color: 'var(--brand-amber)' }} />
+            <Table2 size={34} style={{ color: 'var(--brand-primary-ink)' }} />
             <h3>Custom report builder</h3>
             <p style={{ maxWidth: 420 }}>Client-side generation of muster, attendance and payroll registers with PDF printing.</p>
             <button className="btn btn-primary" onClick={() => setReportOpen(true)}><Table2 size={15} /> Generate report</button>
@@ -83,7 +83,7 @@ export default function DemoLab({ demoKey }) {
       </div>
 
       <div key={tab} className="section-card" style={{ padding: '1.5rem' }}>
-        <FlaskConical size={16} style={{ color: 'var(--brand-indigo)', marginBottom: '0.75rem' }} />
+        <FlaskConical size={16} style={{ color: 'var(--brand-primary-ink)', marginBottom: '0.75rem' }} />
         {renderBody()}
       </div>
     </div>

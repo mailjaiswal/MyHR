@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import useEscapeClose from '../hooks/useEscapeClose';
+import { rampAt } from '../utils/chartPalette';
 import {
   X,
   Search,
@@ -45,10 +46,10 @@ export default function DataDrilldownModal({ isOpen, onClose, type = 'ATTENDANCE
   ];
 
   const wardData = [
-    { name: 'ICU Ward', icon: HeartPulse, color: '#00f2fe', required: 4, active: 4, ratio: '1:1 Critical', lead: 'Sneha Goswami', status: '100% Fully Covered' },
-    { name: 'Emergency Casualty', icon: Activity, color: '#f43f5e', required: 3, active: 3, ratio: '1:3 Emergency', lead: 'Dr. Priya Sharma', status: 'Safe Coverage' },
-    { name: 'Operation OT', icon: Syringe, color: '#8b5cf6', required: 3, active: 3, ratio: 'Ready for Surgeries', lead: 'Anjali Verma', status: '100% Prepared' },
-    { name: 'General Inpatient Wards', icon: Building2, color: '#10b981', required: 6, active: 5, ratio: '1:6 General', lead: 'Sunita Yadav', status: '1 Nurse on Leave' }
+    { name: 'ICU Ward', icon: HeartPulse, color: rampAt(0, isDark), required: 4, active: 4, ratio: '1:1 Critical', lead: 'Sneha Goswami', status: '100% Fully Covered' },
+    { name: 'Emergency Casualty', icon: Activity, color: rampAt(1, isDark), required: 3, active: 3, ratio: '1:3 Emergency', lead: 'Dr. Priya Sharma', status: 'Safe Coverage' },
+    { name: 'Operation OT', icon: Syringe, color: rampAt(2, isDark), required: 3, active: 3, ratio: 'Ready for Surgeries', lead: 'Anjali Verma', status: '100% Prepared' },
+    { name: 'General Inpatient Wards', icon: Building2, color: rampAt(3, isDark), required: 6, active: 5, ratio: '1:6 General', lead: 'Sunita Yadav', status: '1 Nurse on Leave' }
   ];
 
   const hardwareData = [
@@ -109,7 +110,7 @@ export default function DataDrilldownModal({ isOpen, onClose, type = 'ATTENDANCE
       background: 'rgba(0, 0, 0, 0.65)',
       backdropFilter: 'blur(8px)',
       WebkitBackdropFilter: 'blur(8px)',
-      zIndex: 200,
+      zIndex: 'var(--z-modal)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -149,8 +150,8 @@ export default function DataDrilldownModal({ isOpen, onClose, type = 'ATTENDANCE
                 fontWeight: 600,
                 padding: '0.15rem 0.5rem',
                 borderRadius: '9999px',
-                background: isDark ? 'rgba(0, 242, 254, 0.15)' : 'var(--brand-primary-light)',
-                color: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)',
+                background: 'var(--brand-primary-light)',
+                color: 'var(--brand-primary-ink)',
                 textTransform: 'uppercase'
               }}>
                 {period} View
@@ -224,10 +225,10 @@ export default function DataDrilldownModal({ isOpen, onClose, type = 'ATTENDANCE
                         cursor: 'pointer',
                         border: '1px solid var(--border-color)',
                         background: statusFilter === status
-                          ? (isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)')
+                          ? 'var(--brand-primary)'
                           : 'var(--bg-surface-subtle)',
                         color: statusFilter === status
-                          ? (isDark ? '#0a0c10' : '#ffffff')
+                          ? 'var(--on-primary)'
                           : 'var(--text-body)'
                       }}
                     >
@@ -272,7 +273,7 @@ export default function DataDrilldownModal({ isOpen, onClose, type = 'ATTENDANCE
                               <div style={{ fontSize: '0.75rem', color: staff.grace.includes('Exceeded') ? 'var(--brand-rose)' : 'var(--text-body)' }}>
                                 Grace: {staff.grace}
                               </div>
-                              <div style={{ fontSize: '0.6875rem', color: 'var(--brand-primary)', fontWeight: 600 }}>
+                              <div style={{ fontSize: '0.6875rem', color: 'var(--brand-primary-ink)', fontWeight: 600 }}>
                                 OT: {staff.ot}
                               </div>
                             </div>
@@ -387,11 +388,11 @@ export default function DataDrilldownModal({ isOpen, onClose, type = 'ATTENDANCE
                       width: '2.5rem',
                       height: '2.5rem',
                       borderRadius: '0.625rem',
-                      background: 'rgba(0, 242, 254, 0.15)',
+                      background: 'var(--brand-primary-light)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: 'var(--brand-cyan)'
+                      color: 'var(--brand-primary-ink)'
                     }}>
                       <Cpu size={20} />
                     </div>
@@ -412,7 +413,7 @@ export default function DataDrilldownModal({ isOpen, onClose, type = 'ATTENDANCE
                     </div>
                     <div>
                       <div style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }}>Ping Latency</div>
-                      <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--brand-primary)' }}>{hw.ping}</div>
+                      <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--brand-primary-ink)' }}>{hw.ping}</div>
                     </div>
                     <span style={{
                       display: 'inline-flex',
@@ -452,9 +453,7 @@ export default function DataDrilldownModal({ isOpen, onClose, type = 'ATTENDANCE
             className="btn-swaniki btn-swaniki-primary"
             style={{
               padding: '0.45rem 1.1rem',
-              fontSize: '0.8125rem',
-              background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)',
-              color: isDark ? '#0a0c10' : '#ffffff'
+              fontSize: '0.8125rem'
             }}
           >
             Close Drilldown

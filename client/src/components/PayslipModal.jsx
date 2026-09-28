@@ -50,7 +50,7 @@ export default function PayslipModal({ isOpen, onClose, payslipData, employeeId,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 60,
+      zIndex: 'var(--z-modal)',
       padding: '1.5rem',
       overflowY: 'auto'
     }}>
@@ -155,7 +155,7 @@ export default function PayslipModal({ isOpen, onClose, payslipData, employeeId,
         <div style={{ textAlign: 'center', marginBottom: '1.5rem', borderBottom: '2px solid #0f172a', paddingBottom: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
             <Activity size={24} color="#059669" />
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#0f172a' }}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em', color: '#0f172a' }}>
               {hospital?.NAME || 'Your Company Pvt Ltd'}
             </h2>
           </div>
@@ -223,23 +223,23 @@ export default function PayslipModal({ isOpen, onClose, payslipData, employeeId,
         }}>
           <div>
             <span style={{ color: '#047857', fontSize: '0.6875rem', fontWeight: 600 }}>CALENDAR DAYS</span>
-            <p style={{ fontWeight: 800, fontSize: '1rem', color: '#065f46' }}>{payslip?.calendar_days}</p>
+            <p style={{ fontWeight: 700, fontSize: '1rem', color: '#065f46' }}>{payslip?.calendar_days}</p>
           </div>
           <div>
             <span style={{ color: '#047857', fontSize: '0.6875rem', fontWeight: 600 }}>PAYABLE DAYS</span>
-            <p style={{ fontWeight: 800, fontSize: '1rem', color: '#065f46' }}>{payslip?.payable_days}</p>
+            <p style={{ fontWeight: 700, fontSize: '1rem', color: '#065f46' }}>{payslip?.payable_days}</p>
           </div>
           <div>
             <span style={{ color: '#047857', fontSize: '0.6875rem', fontWeight: 600 }}>ABSENT DAYS</span>
-            <p style={{ fontWeight: 800, fontSize: '1rem', color: '#b91c1c' }}>{payslip?.absent_days}</p>
+            <p style={{ fontWeight: 700, fontSize: '1rem', color: '#b91c1c' }}>{payslip?.absent_days}</p>
           </div>
           <div>
             <span style={{ color: '#047857', fontSize: '0.6875rem', fontWeight: 600 }}>BIOMETRIC HOURS</span>
-            <p style={{ fontWeight: 800, fontSize: '1rem', color: '#065f46' }}>{payslip?.total_hours_worked}h</p>
+            <p style={{ fontWeight: 700, fontSize: '1rem', color: '#065f46' }}>{payslip?.total_hours_worked}h</p>
           </div>
           <div>
             <span style={{ color: '#047857', fontSize: '0.6875rem', fontWeight: 600 }}>OVERTIME LOGGED</span>
-            <p style={{ fontWeight: 800, fontSize: '1rem', color: '#4338ca' }}>{payslip?.overtime_hours}h</p>
+            <p style={{ fontWeight: 700, fontSize: '1rem', color: '#047857' }}>{payslip?.overtime_hours}h</p>
           </div>
         </div>
 
@@ -267,7 +267,7 @@ export default function PayslipModal({ isOpen, onClose, payslipData, employeeId,
                 <span>Special Allowance</span>
                 <strong>₹{payslip?.special_allowance?.toLocaleString('en-IN')}</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#4338ca' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#047857' }}>
                 <span>Overtime Allowance (1.5x)</span>
                 <strong>₹{payslip?.overtime_pay?.toLocaleString('en-IN')}</strong>
               </div>
@@ -276,7 +276,7 @@ export default function PayslipModal({ isOpen, onClose, payslipData, employeeId,
                 justifyContent: 'space-between',
                 paddingTop: '0.5rem',
                 borderTop: '2px solid #cbd5e1',
-                fontWeight: 800,
+                fontWeight: 700,
                 color: '#0f172a'
               }}>
                 <span>GROSS EARNINGS</span>
@@ -316,7 +316,7 @@ export default function PayslipModal({ isOpen, onClose, payslipData, employeeId,
                 justifyContent: 'space-between',
                 paddingTop: '0.5rem',
                 borderTop: '2px solid #cbd5e1',
-                fontWeight: 800,
+                fontWeight: 700,
                 color: '#b91c1c'
               }}>
                 <span>TOTAL DEDUCTIONS</span>
@@ -339,7 +339,7 @@ export default function PayslipModal({ isOpen, onClose, payslipData, employeeId,
         }}>
           <div>
             <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>NET TAKE-HOME SALARY</span>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#34d399' }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#34d399' }}>
               ₹{payslip?.net_salary?.toLocaleString('en-IN')}
             </div>
           </div>

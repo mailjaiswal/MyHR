@@ -78,7 +78,7 @@ export default function LivePunchFeed() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
           <span className="live-beacon"></span>
-          <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--text-heading)' }}>
+          <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-heading)' }}>
             Live Hardware Stream
           </h3>
         </div>
@@ -90,6 +90,15 @@ export default function LivePunchFeed() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', flex: 1, overflowY: 'auto' }}>
         {punches.map((p, idx) => {
           const isSneha = p.employeeName.includes('Sneha Goswami');
+          // Initials in a squircle instead of a stock emoji - one consistent
+          // treatment for every person in the feed.
+          const initials = String(p.employeeName || '?')
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((w) => w[0])
+            .join('')
+            .toUpperCase();
           return (
             <div
               key={p.id || idx}
@@ -114,13 +123,17 @@ export default function LivePunchFeed() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '1rem'
+                  fontFamily: 'var(--font-heading)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  letterSpacing: '-0.01em',
+                  color: isSneha ? 'var(--brand-primary-ink)' : 'var(--text-caption)'
                 }}>
-                  {isSneha ? '👩‍⚕️' : '👤'}
+                  {initials}
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                    <strong style={{ fontSize: '0.8125rem', color: isSneha ? 'var(--brand-primary)' : 'var(--text-heading)', fontWeight: 800 }}>
+                    <strong style={{ fontSize: '0.8125rem', color: isSneha ? 'var(--brand-primary-ink)' : 'var(--text-heading)', fontWeight: 700 }}>
                       {p.employeeName}
                     </strong>
                     {isSneha && (

@@ -70,7 +70,16 @@ export default function Dashboard({ onNavigate }) {
   }
 
   const s = summary?.stats || null;
-  const pct = s && s.totalStaff > 0 ? Math.round((s.presentCount / s.totalStaff) * 100) : 0;
+  // presentCount is a count of attendance RECORDS over the selected range, while
+  // totalStaff is a headcount - so "% of strength" is only meaningful for a single
+  // day (present <= strength). For a wider range we show a person-days attendance
+  // rate instead, which stays correct however long the period is.
+  const markedDays = s ? (s.presentCount + s.absentCount + (s.halfDayCount || 0)) : 0;
+  const presentHint = s && s.totalStaff > 0
+    ? (s.presentCount <= s.totalStaff
+        ? `${Math.round((s.presentCount / s.totalStaff) * 100)}% of strength`
+        : (markedDays > 0 ? `${Math.round((s.presentCount / markedDays) * 100)}% attendance in range` : 'No attendance marked yet'))
+    : '';
 
   return (
     <div className="page">
@@ -93,7 +102,7 @@ export default function Dashboard({ onNavigate }) {
             <StatCard icon={Users} label="Total staff" value={s.totalStaff} hint="In your scope" onClick={hasPerm('EMPLOYEES_VIEW') ? () => onNavigate('employees') : undefined} />
           )}
           {dataScope !== 'SELF' && (
-            <StatCard icon={UserCheck} label="Present" value={s.presentCount} tone="ok" hint={`${pct}% of strength`} onClick={() => onNavigate('attendance')} />
+            <StatCard icon={UserCheck} label="Present" value={s.presentCount} tone="ok" hint={presentHint} onClick={() => onNavigate('attendance')} />
           )}
           {dataScope !== 'SELF' && (
             <StatCard icon={UserX} label="Absent" value={s.absentCount} tone="bad" hint="Not punched in" onClick={() => onNavigate('attendance')} />

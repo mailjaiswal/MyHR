@@ -66,13 +66,13 @@ export default function PasswordChangeModal({ forced = false, onClose }) {
         </div>
 
         {forced && (
-          <p style={{ fontSize: '0.8125rem', color: 'var(--brand-rose)', margin: '0.5rem 0 1rem', fontWeight: 500 }}>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--danger-ink)', margin: '0.5rem 0 1rem', fontWeight: 500 }}>
             You must change your password before continuing.
           </p>
         )}
 
         {error && <div className="login-error" style={{ marginBottom: '0.75rem' }}>{error}</div>}
-        {success && <div style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: '0.8125rem', marginBottom: '0.75rem' }}>{success}</div>}
+        {success && <div style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', background: 'rgba(16,185,129,0.1)', color: 'var(--brand-primary-ink)', fontSize: '0.8125rem', marginBottom: '0.75rem' }}>{success}</div>}
 
         <form onSubmit={handleSubmit} className="login-form">
           <label className="login-field">

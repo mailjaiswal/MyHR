@@ -80,11 +80,11 @@ export default function Payroll({ onOpenPayslip }) {
         </div>
       </div>
 
-      {message && <div className="demo-banner" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>{message}</div>}
+      {message && <div className="demo-banner" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'var(--brand-primary-light)', color: 'var(--brand-primary-ink)' }}>{message}</div>}
 
       <div className="stat-grid">
         <div className="stat-card">
-          <span className="stat-label"><Banknote size={14} style={{ color: 'var(--brand-primary)' }} /> Net payout · {monthLabel}</span>
+          <span className="stat-label"><Banknote size={14} style={{ color: 'var(--brand-primary-ink)' }} /> Net payout · {monthLabel}</span>
           <span className="stat-value">{inr(totalNet)}</span>
           <span className="stat-hint">{slips.length} employees</span>
         </div>
@@ -137,7 +137,7 @@ export default function Payroll({ onOpenPayslip }) {
                   <td>{s.department_name}</td>
                   <td className="mono">{s.payable_days}</td>
                   <td className="mono">{inr(s.gross_earnings)}</td>
-                  <td className="mono" style={{ color: 'var(--brand-rose)' }}>−{inr(s.total_deductions)}</td>
+                  <td className="mono" style={{ color: 'var(--danger-ink)' }}>−{inr(s.total_deductions)}</td>
                   <td className="mono" style={{ fontWeight: 700, color: 'var(--text-heading)' }}>{inr(s.net_salary)}</td>
                   <td><span className="status-pill status-ok">{s.status || 'COMPUTED'}</span></td>
                   <td>
@@ -171,7 +171,7 @@ export default function Payroll({ onOpenPayslip }) {
                   style={{ cursor: 'pointer' }}
                   title={`View ${formatMonthYear(r.month_year)}`}
                 >
-                  <td className="mono" style={{ fontWeight: 600, color: 'var(--brand-primary)' }}>{formatMonthYear(r.month_year)}</td>
+                  <td className="mono" style={{ fontWeight: 600, color: 'var(--brand-primary-ink)' }}>{formatMonthYear(r.month_year)}</td>
                   <td>{r.employee_count}</td>
                   <td className="mono">{inr(r.net_payroll)}</td>
                   <td><span className="status-pill status-ok">{r.status || 'COMPLETED'}</span></td>

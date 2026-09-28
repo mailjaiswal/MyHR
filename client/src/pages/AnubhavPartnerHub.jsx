@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useTheme } from '../context/ThemeContext';
 import { Cpu, Terminal, Copy, Check, ShieldCheck, Wifi, RefreshCw, Settings2, Key, Server, Radio } from 'lucide-react';
 
 export default function AnubhavPartnerHub({ onOpenSimulator }) {
-  const { isDark } = useTheme();
   const [devices, setDevices] = useState([]);
   const [supportedModels, setSupportedModels] = useState([]);
   const [copied, setCopied] = useState(false);
@@ -77,8 +75,8 @@ export default function AnubhavPartnerHub({ onOpenSimulator }) {
               Hardware Alignment • ABC Pvt Ltd
             </span>
           </div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.03em' }}>
-            Anubhav Infotech <em style={{ fontStyle: 'italic', color: isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)' }}>Hardware Gateway</em>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-heading)', letterSpacing: '-0.03em' }}>
+            Anubhav Infotech <em className="highlight-italic">Hardware Gateway</em>
           </h1>
           <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
             Direct biometric ingestion gateway, choosable hardware models, and offline edge daemon bridge for field technicians.
@@ -91,8 +89,8 @@ export default function AnubhavPartnerHub({ onOpenSimulator }) {
           style={{
             padding: '0.5rem 1rem',
             fontSize: '0.8125rem',
-            background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)',
-            color: isDark ? '#0a0c10' : '#ffffff'
+            background: 'var(--brand-primary)',
+            color: 'var(--on-primary)'
           }}
         >
           <Cpu size={16} />
@@ -110,7 +108,7 @@ export default function AnubhavPartnerHub({ onOpenSimulator }) {
           alignItems: 'center',
           gap: '0.5rem',
           fontSize: '0.8125rem',
-          color: '#10b981',
+          color: 'var(--brand-primary-ink)',
           fontWeight: 600
         }}>
           <Check size={16} />
@@ -129,16 +127,16 @@ export default function AnubhavPartnerHub({ onOpenSimulator }) {
                     width: '2.75rem',
                     height: '2.75rem',
                     borderRadius: '0.75rem',
-                    background: isDark ? 'rgba(0, 242, 254, 0.12)' : 'var(--brand-primary-light)',
+                    background: 'var(--brand-primary-light)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    border: `1px solid ${isDark ? 'rgba(0, 242, 254, 0.3)' : 'rgba(16, 185, 129, 0.25)'}`
+                    border: '1px solid rgba(16, 185, 129, 0.25)'
                   }}>
-                    <Radio size={20} color={isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)'} />
+                    <Radio size={20} color="var(--brand-primary-ink)" />
                   </div>
                   <div>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-heading)' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-heading)' }}>
                       {dev.device_name}
                     </h3>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -161,7 +159,7 @@ export default function AnubhavPartnerHub({ onOpenSimulator }) {
                 border: '1px solid var(--border-color)',
                 borderRadius: '0.75rem'
               }}>
-                <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.375rem', textTransform: 'uppercase' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.375rem' }}>
                   Hardware Model Selection (Phase 2 Choice):
                 </label>
                 <select
@@ -190,7 +188,7 @@ export default function AnubhavPartnerHub({ onOpenSimulator }) {
               borderTop: '1px solid var(--border-subtle)'
             }}>
               <p>Serial Number: <strong style={{ color: 'var(--text-heading)' }}>{dev.serial_number}</strong></p>
-              <p>LAN IP Address: <code style={{ color: isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)', fontWeight: 700 }}>{dev.ip_address}:{dev.port}</code></p>
+              <p>LAN IP Address: <code style={{ color: 'var(--brand-primary-ink)', fontWeight: 700 }}>{dev.ip_address}:{dev.port}</code></p>
               <p>Sync Protocol: <strong style={{ color: 'var(--text-heading)' }}>{dev.protocol} (Push Webhook)</strong></p>
             </div>
           </div>
@@ -200,8 +198,8 @@ export default function AnubhavPartnerHub({ onOpenSimulator }) {
       {/* Partner Webhook Credentials */}
       <div className="swaniki-card" style={{ padding: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-          <Key size={18} color={isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)'} />
-          <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-heading)' }}>
+          <Key size={18} color="var(--brand-primary-ink)" />
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-heading)' }}>
             Anubhav Infotech Secret API Key &amp; Hardware Credentials
           </h3>
         </div>
@@ -211,12 +209,12 @@ export default function AnubhavPartnerHub({ onOpenSimulator }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', fontSize: '0.8125rem' }}>
           <div style={{ background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-color)', padding: '0.875rem 1rem', borderRadius: '0.75rem' }}>
-            <span style={{ color: 'var(--text-caption)', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>HEADER PARAMETER</span>
-            <p style={{ fontWeight: 800, color: 'var(--text-heading)', marginTop: '0.25rem' }}>x-api-key</p>
+            <span className="eyebrow">Header parameter</span>
+            <p style={{ fontWeight: 700, color: 'var(--text-heading)', marginTop: '0.25rem' }}>x-api-key</p>
           </div>
           <div style={{ background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-color)', padding: '0.875rem 1rem', borderRadius: '0.75rem' }}>
-            <span style={{ color: 'var(--text-caption)', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>PRE-CONFIGURED SECRET TOKEN</span>
-            <p style={{ fontWeight: 800, color: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)', marginTop: '0.25rem' }}>ANUBHAV_DNH_SECRET_2026</p>
+            <span className="eyebrow">Pre-configured secret token</span>
+            <p style={{ fontWeight: 700, color: 'var(--brand-primary-ink)', marginTop: '0.25rem' }}>ANUBHAV_DNH_SECRET_2026</p>
           </div>
         </div>
       </div>
@@ -225,8 +223,8 @@ export default function AnubhavPartnerHub({ onOpenSimulator }) {
       <div className="swaniki-card" style={{ padding: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Terminal size={18} color={isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)'} />
-            <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-heading)' }}>
+            <Terminal size={18} color="var(--brand-primary-ink)" />
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-heading)' }}>
               Direct Biometric Hardware Push Sample (cURL)
             </h3>
           </div>
@@ -235,17 +233,17 @@ export default function AnubhavPartnerHub({ onOpenSimulator }) {
             className="btn-swaniki btn-swaniki-ghost"
             style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem' }}
           >
-            {copied ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+            {copied ? <Check size={14} color="var(--brand-primary-ink)" /> : <Copy size={14} />}
             <span>{copied ? 'Copied to Clipboard!' : 'Copy cURL Snippet'}</span>
           </button>
         </div>
 
         <pre style={{
-          background: isDark ? '#05070a' : '#0f172a',
+          background: '#0f172a',
           padding: '1.125rem',
           borderRadius: '0.75rem',
           fontSize: '0.8125rem',
-          color: '#34d399',
+          color: '#6ee7b7',
           overflowX: 'auto',
           border: '1px solid var(--border-color)',
           fontFamily: 'monospace',
@@ -258,16 +256,15 @@ export default function AnubhavPartnerHub({ onOpenSimulator }) {
       {/* Phase 2 Discussion Points with Anubhav Infotech */}
       <div className="swaniki-card" style={{
         padding: '1.5rem',
-        background: isDark ? 'rgba(0, 242, 254, 0.04)' : 'rgba(79, 70, 229, 0.03)',
-        border: isDark ? '1px solid rgba(0, 242, 254, 0.25)' : '1px solid rgba(79, 70, 229, 0.2)'
+        background: 'var(--bg-surface-subtle)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-          <Settings2 size={18} color={isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)'} />
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)' }}>
+          <Settings2 size={18} color="var(--brand-primary-ink)" />
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-heading)' }}>
             Phase 2 Technical Discussion Agenda with Anubhav Infotech
           </h3>
         </div>
-        <ul style={{ fontSize: '0.8125rem', color: 'var(--text-body)', lineHeight: 1.7, paddingLeft: '1.25rem' }}>
+        <ul style={{ fontSize: '0.8125rem', color: 'var(--text-body)', lineHeight: 1.7, paddingLeft: '1.25rem', maxWidth: '68ch' }}>
           <li><strong style={{ color: 'var(--text-heading)' }}>Device Selection Alignment</strong>: Evaluate whether to deploy <em>eSSL uFace 302</em> (contactless dual-camera facial recognition, highly recommended for ICU hygiene) vs <em>eSSL K90 Pro</em> (economical optical fingerprint with internal battery backup for power failures).</li>
           <li><strong style={{ color: 'var(--text-heading)' }}>Zero-Cost Cloud Connectivity</strong>: Demonstrate how Cloudflare Tunnels eliminate the need for Anubhav Infotech or ABC Pvt Ltd to buy static IP addresses or reconfigure hospital Wi-Fi router firewalls.</li>
           <li><strong style={{ color: 'var(--text-heading)' }}>No Mediator MS-SQL Database</strong>: Spine HR required an extra MS-SQL database instance that Anubhav had to configure and support. Show how our direct REST webhook handles punches directly into SQLite/Postgres with zero maintenance.</li>

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useTheme } from '../context/ThemeContext';
 import {
   Clock,
   Users,
@@ -14,7 +13,6 @@ import {
 } from 'lucide-react';
 
 export default function Shift24HourTimeline() {
-  const { isDark } = useTheme();
   const [selectedShift, setSelectedShift] = useState(null);
   const [activeWardFilter, setActiveWardFilter] = useState('ALL');
 
@@ -28,9 +26,9 @@ export default function Shift24HourTimeline() {
       id: 'morning',
       name: 'Morning Shift (A)',
       time: '08:00 — 16:00 (8h)',
-      color: '#0284c7',
-      bg: isDark ? 'rgba(2, 132, 199, 0.22)' : 'rgba(2, 132, 199, 0.12)',
-      border: '#0284c7',
+      color: '#0d9488',
+      bg: '#0d94881f',
+      border: '#0d9488',
       startPct: (8 / 24) * 100,      // 33.33%
       widthPct: (8 / 24) * 100,      // 33.33%
       staffCount: 16,
@@ -41,9 +39,9 @@ export default function Shift24HourTimeline() {
       id: 'general',
       name: 'General Day Shift',
       time: '09:00 — 17:00 (8h)',
-      color: '#3b82f6',
-      bg: isDark ? 'rgba(59, 130, 246, 0.22)' : 'rgba(59, 130, 246, 0.12)',
-      border: '#3b82f6',
+      color: '#10b981',
+      bg: '#10b9811f',
+      border: '#10b981',
       startPct: (9 / 24) * 100,      // 37.5%
       widthPct: (8 / 24) * 100,      // 33.33%
       staffCount: 8,
@@ -54,9 +52,9 @@ export default function Shift24HourTimeline() {
       id: 'evening',
       name: 'Evening Shift (B)',
       time: '14:00 — 22:00 (8h)',
-      color: '#10b981',
-      bg: isDark ? 'rgba(16, 185, 129, 0.22)' : 'rgba(16, 185, 129, 0.12)',
-      border: '#10b981',
+      color: '#34d399',
+      bg: '#34d3991f',
+      border: '#34d399',
       startPct: (14 / 24) * 100,     // 58.33%
       widthPct: (8 / 24) * 100,      // 33.33%
       staffCount: 14,
@@ -67,9 +65,9 @@ export default function Shift24HourTimeline() {
       id: 'night_part1',
       name: 'Night Shift (C) • Evening Leg',
       time: '20:00 — 24:00 (4h before midnight)',
-      color: '#8b5cf6',
-      bg: isDark ? 'rgba(139, 92, 246, 0.22)' : 'rgba(139, 92, 246, 0.12)',
-      border: '#8b5cf6',
+      color: '#6ee7b7',
+      bg: '#6ee7b71f',
+      border: '#6ee7b7',
       startPct: (20 / 24) * 100,     // 83.33%
       widthPct: (4 / 24) * 100,      // 16.67%
       staffCount: 12,
@@ -80,9 +78,9 @@ export default function Shift24HourTimeline() {
       id: 'night_part2',
       name: 'Night Shift (C) • Post-Midnight Leg',
       time: '00:00 — 08:00 (8h post midnight)',
-      color: '#8b5cf6',
-      bg: isDark ? 'rgba(139, 92, 246, 0.22)' : 'rgba(139, 92, 246, 0.12)',
-      border: '#8b5cf6',
+      color: '#6ee7b7',
+      bg: '#6ee7b71f',
+      border: '#6ee7b7',
       startPct: 0,                   // 0%
       widthPct: (8 / 24) * 100,      // 33.33%
       staffCount: 12,
@@ -133,7 +131,7 @@ export default function Shift24HourTimeline() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Clock size={18} color="var(--brand-primary)" />
+            <Clock size={18} color="var(--brand-primary-ink)" />
             <h3 style={{ fontSize: '1.0625rem', fontWeight: 600, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
               24-Hour Hospital Shift Coverage Matrix
             </h3>
@@ -142,8 +140,8 @@ export default function Shift24HourTimeline() {
               fontWeight: 600,
               padding: '0.15rem 0.5rem',
               borderRadius: '9999px',
-              background: 'rgba(16, 185, 129, 0.12)',
-              color: '#10b981'
+              background: 'var(--brand-primary-light)',
+              color: 'var(--brand-primary-ink)'
             }}>
               Zero Coverage Gaps
             </span>
@@ -156,20 +154,20 @@ export default function Shift24HourTimeline() {
         {/* Legend Pills */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', fontSize: '0.72rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#0284c7' }}></span>
+            <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#0d9488' }}></span>
             <span style={{ color: 'var(--text-body)' }}>Morning (08-16)</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#10b981' }}></span>
+            <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#34d399' }}></span>
             <span style={{ color: 'var(--text-body)' }}>Evening (14-22)</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#8b5cf6' }}></span>
+            <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#6ee7b7' }}></span>
             <span style={{ color: 'var(--text-body)' }}>Night Cross-Midnight (20-08)</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
             <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#f59e0b' }}></span>
-            <span style={{ color: 'var(--brand-amber)', fontWeight: 600 }}>Overlap Zones</span>
+            <span style={{ color: 'var(--warning-ink)', fontWeight: 600 }}>Overlap Zones</span>
           </div>
         </div>
       </div>
@@ -248,7 +246,7 @@ export default function Shift24HourTimeline() {
                   {shifts[0].time}
                 </span>
               </div>
-              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: shifts[0].color, background: 'var(--bg-surface)', padding: '0.15rem 0.45rem', borderRadius: '9999px' }}>
+              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--brand-primary-ink)', background: 'var(--bg-surface)', padding: '0.15rem 0.45rem', borderRadius: '9999px' }}>
                 {shifts[0].staffCount} Staff
               </span>
             </div>
@@ -277,7 +275,7 @@ export default function Shift24HourTimeline() {
               <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-heading)' }}>
                 {shifts[1].name} ({shifts[1].time})
               </span>
-              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: shifts[1].color, background: 'var(--bg-surface)', padding: '0.15rem 0.45rem', borderRadius: '9999px' }}>
+              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--brand-primary-ink)', background: 'var(--bg-surface)', padding: '0.15rem 0.45rem', borderRadius: '9999px' }}>
                 {shifts[1].staffCount} Staff
               </span>
             </div>
@@ -311,7 +309,7 @@ export default function Shift24HourTimeline() {
                   {shifts[2].time}
                 </span>
               </div>
-              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: shifts[2].color, background: 'var(--bg-surface)', padding: '0.15rem 0.45rem', borderRadius: '9999px' }}>
+              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--brand-primary-ink)', background: 'var(--bg-surface)', padding: '0.15rem 0.45rem', borderRadius: '9999px' }}>
                 {shifts[2].staffCount} Staff
               </span>
             </div>
@@ -340,7 +338,7 @@ export default function Shift24HourTimeline() {
               <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-heading)' }}>
                 🌙 Night (C) • Morning Handover (00-08)
               </span>
-              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#8b5cf6', background: 'var(--bg-surface)', padding: '0.15rem 0.45rem', borderRadius: '9999px' }}>
+              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--brand-primary-ink)', background: 'var(--bg-surface)', padding: '0.15rem 0.45rem', borderRadius: '9999px' }}>
                 12 Staff
               </span>
             </div>
@@ -368,7 +366,7 @@ export default function Shift24HourTimeline() {
                   🌙 Night (20-24)
                 </span>
               </div>
-              <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#8b5cf6', background: 'var(--bg-surface)', padding: '0.15rem 0.4rem', borderRadius: '9999px' }}>
+              <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--brand-primary-ink)', background: 'var(--bg-surface)', padding: '0.15rem 0.4rem', borderRadius: '9999px' }}>
                 Sneha Goswami
               </span>
             </div>
@@ -392,7 +390,7 @@ export default function Shift24HourTimeline() {
                 gap: '0.35rem'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--brand-amber)' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--warning-ink)' }}>
                     ⚡ {ov.label}
                   </span>
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-caption)', fontFamily: 'monospace' }}>
@@ -402,7 +400,7 @@ export default function Shift24HourTimeline() {
                 <p style={{ fontSize: '0.72rem', color: 'var(--text-body)', lineHeight: 1.3 }}>
                   {ov.activity}
                 </p>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--brand-primary)', fontWeight: 600 }}>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--brand-primary-ink)', fontWeight: 600 }}>
                   ✓ {ov.staffOverlap}
                 </div>
               </div>

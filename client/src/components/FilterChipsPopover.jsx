@@ -75,7 +75,7 @@ export default function FilterChipsPopover({ departments, designations, employee
       </button>
 
       {open && (
-        <div className="crp-popover bezel-card" style={{ position: 'absolute', top: 'calc(100% + 0.5rem)', right: 0, zIndex: 60, width: 'min(92vw, 26rem)', ...clampStyle }}>
+        <div className="crp-popover bezel-card" style={{ position: 'absolute', top: 'calc(100% + 0.5rem)', right: 0, zIndex: 'var(--z-popover)', width: 'min(92vw, 26rem)', ...clampStyle }}>
           <div className="bezel-inner" style={{ padding: '0.75rem 1rem 1rem', maxHeight: 'min(58vh, 32rem)', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="eyebrow">Filter attendance</span>

@@ -10,22 +10,25 @@ import {
 } from 'lucide-react';
 
 // ── Pre-populated search index ──────────────────────────────────────────────
+// Icon/badge colours are steps of the single emerald data ramp; amber and rose
+// stay reserved for caution and fault only. Hex (not var) because these are
+// concatenated with alpha suffixes at render time.
 const SEARCH_INDEX = [
   // Navigation
   { type: 'nav', label: 'Dashboard Overview',    desc: 'Live KPIs & hospital metrics',        icon: LayoutDashboard, tab: 'dashboard',       color: '#10b981' },
-  { type: 'nav', label: '24×7 Shift Roster',     desc: 'Shift schedules & handover timeline', icon: Clock,           tab: 'roster',          color: '#8b5cf6' },
-  { type: 'nav', label: 'Biometrics & Attendance',desc: 'Punch records & muster roll',         icon: CalendarCheck,   tab: 'attendance',      color: '#00f2fe' },
+  { type: 'nav', label: '24×7 Shift Roster',     desc: 'Shift schedules & handover timeline', icon: Clock,           tab: 'roster',          color: '#047857' },
+  { type: 'nav', label: 'Biometrics & Attendance',desc: 'Punch records & muster roll',         icon: CalendarCheck,   tab: 'attendance',      color: '#2dd4bf' },
   { type: 'nav', label: 'Payroll Hub',            desc: 'Salary processing & payslips',        icon: FileSpreadsheet, tab: 'payroll',         color: '#f59e0b' },
   { type: 'nav', label: 'Hardware Gateway',       desc: 'eSSL / ZKTeco device manager',        icon: Cpu,             tab: 'anubhav',         color: '#ef4444' },
-  { type: 'nav', label: 'Staff Portal',           desc: 'Employee self-service view',          icon: User,            tab: 'employee-portal', color: '#3b82f6' },
+  { type: 'nav', label: 'Staff Portal',           desc: 'Employee self-service view',          icon: User,            tab: 'employee-portal', color: '#0d9488' },
   { type: 'nav', label: 'My Payslip',            desc: 'View & download your payslips',       icon: FileSpreadsheet, tab: 'payslip',         color: '#10b981' },
 
   // Staff
-  { type: 'staff', label: 'Sneha Goswami',   desc: 'Senior Staff Nurse · ICU Ward · DNH-101',       icon: HeartPulse,  color: '#00f2fe' },
+  { type: 'staff', label: 'Sneha Goswami',   desc: 'Senior Staff Nurse · ICU Ward · DNH-101',       icon: HeartPulse,  color: '#2dd4bf' },
   { type: 'staff', label: 'Dr. Priya Sharma',desc: 'HR & Medical Supt · Administration · DNH-102',  icon: Users,       color: '#10b981' },
-  { type: 'staff', label: 'Rajesh Patel',    desc: 'ICU Staff Nurse · ICU Ward · DNH-103',          icon: HeartPulse,  color: '#00f2fe' },
-  { type: 'staff', label: 'Anjali Verma',    desc: 'OT Staff Nurse · Operation OT · DNH-104',       icon: Syringe,     color: '#8b5cf6' },
-  { type: 'staff', label: 'Vikas Deshmukh', desc: 'OT Technician · Operation OT · DNH-105',         icon: Syringe,     color: '#8b5cf6' },
+  { type: 'staff', label: 'Rajesh Patel',    desc: 'ICU Staff Nurse · ICU Ward · DNH-103',          icon: HeartPulse,  color: '#2dd4bf' },
+  { type: 'staff', label: 'Anjali Verma',    desc: 'OT Staff Nurse · Operation OT · DNH-104',       icon: Syringe,     color: '#047857' },
+  { type: 'staff', label: 'Vikas Deshmukh', desc: 'OT Technician · Operation OT · DNH-105',         icon: Syringe,     color: '#047857' },
   { type: 'staff', label: 'Sunita Yadav',   desc: 'General Ward Nurse · Inpatient · DNH-106',       icon: Building2,   color: '#10b981' },
   { type: 'staff', label: 'Manoj Kumar',    desc: 'Ward Boy / Attendant · Emergency · DNH-107',     icon: Activity,    color: '#ef4444' },
   { type: 'staff', label: 'Kavita Chouksey',desc: 'Staff Nurse · Emergency · DNH-108',              icon: Activity,    color: '#ef4444' },
@@ -33,14 +36,14 @@ const SEARCH_INDEX = [
   { type: 'staff', label: 'Deepak Sahu',    desc: 'Lab Technician · Administration · DNH-111',      icon: Users,       color: '#f59e0b' },
 
   // Wards
-  { type: 'ward', label: 'ICU Ward',             desc: 'Intensive Care Unit · 4 nurses on duty',    icon: HeartPulse,  color: '#00f2fe' },
+  { type: 'ward', label: 'ICU Ward',             desc: 'Intensive Care Unit · 4 nurses on duty',    icon: HeartPulse,  color: '#2dd4bf' },
   { type: 'ward', label: 'Emergency Casualty',   desc: '24×7 Emergency · 3 nurses on duty',         icon: Flame,       color: '#ef4444' },
-  { type: 'ward', label: 'Operation Theatre',    desc: 'OT Block · Ready for surgeries',            icon: Syringe,     color: '#8b5cf6' },
+  { type: 'ward', label: 'Operation Theatre',    desc: 'OT Block · Ready for surgeries',            icon: Syringe,     color: '#047857' },
   { type: 'ward', label: 'Inpatient Wards',      desc: 'General Wards · 5/6 nurses on duty',        icon: Building2,   color: '#10b981' },
 
   // Quick actions
   { type: 'action', label: 'Simulate Biometric Punch', desc: 'Test eSSL / ZKTeco hardware punch',   icon: Zap,         color: '#f59e0b', action: 'simulator' },
-  { type: 'action', label: 'Create Custom Report',     desc: 'Generate HR & Payroll PDF report',    icon: FileText,    color: '#3b82f6', action: 'report'    },
+  { type: 'action', label: 'Create Custom Report',     desc: 'Generate HR & Payroll PDF report',    icon: FileText,    color: '#0d9488', action: 'report'    },
 ];
 
 const TYPE_LABEL = { nav: 'Pages', staff: 'Staff', ward: 'Wards', action: 'Quick Actions' };
@@ -178,7 +181,7 @@ export default function Navbar({ onOpenSimulator, onToggleMobileNav, isMobileNav
       borderBottom: '1px solid var(--border-color)',
       position: 'sticky',
       top: 0,
-      zIndex: 40,
+      zIndex: 'var(--z-nav)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -197,20 +200,20 @@ export default function Navbar({ onOpenSimulator, onToggleMobileNav, isMobileNav
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div style={{
             width: '2.5rem', height: '2.5rem', borderRadius: '0.75rem', flexShrink: 0,
-            background: isDark ? 'linear-gradient(135deg, #00f2fe, #4facfe)' : 'linear-gradient(135deg, #10b981, #059669)',
+            background: 'linear-gradient(135deg, #10b981, #047857)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: isDark ? '0 0 16px 0 rgba(0,242,254,0.35)' : '0 4px 14px 0 rgba(16,185,129,0.35)'
+            boxShadow: '0 4px 14px 0 rgba(16, 185, 129, 0.32)'
           }}>
-            <Activity size={20} color={isDark ? '#0a0c10' : '#ffffff'} />
+            <Activity size={20} color="var(--on-primary)" />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '1.25rem', fontWeight: 900, letterSpacing: '-0.035em', color: 'var(--text-heading)', lineHeight: 1 }}>myHR</span>
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.035em', color: 'var(--text-heading)', lineHeight: 1 }}>myHR</span>
               <span style={{
-                fontSize: '0.625rem', fontWeight: 800, padding: '0.125rem 0.45rem',
+                fontSize: '0.625rem', fontWeight: 700, padding: '0.125rem 0.45rem',
                 borderRadius: '9999px', letterSpacing: '0.04em',
-                background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)',
-                color: isDark ? '#0a0c10' : '#ffffff'
+                background: 'var(--brand-primary)',
+                color: 'var(--on-primary)'
               }}>BY SWANIKI</span>
             </div>
             <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
@@ -242,12 +245,10 @@ export default function Navbar({ onOpenSimulator, onToggleMobileNav, isMobileNav
               borderRadius: isOpen ? '0.75rem 0.75rem 0 0' : '0.75rem',
               background: 'var(--bg-surface-subtle)',
               border: '1px solid var(--border-color)',
-              borderBottom: isOpen ? `1px solid ${isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)'}` : '1px solid var(--border-color)',
+              borderBottom: isOpen ? '1px solid var(--brand-primary)' : '1px solid var(--border-color)',
               color: 'var(--text-heading)', fontSize: '0.8125rem', outline: 'none',
               transition: 'border-color 0.15s ease, border-radius 0.15s ease, box-shadow 0.15s ease',
-              boxShadow: isOpen
-                ? isDark ? '0 0 0 2px rgba(0,242,254,0.15)' : '0 0 0 2px rgba(16,185,129,0.15)'
-                : 'none'
+              boxShadow: isOpen ? '0 0 0 3px var(--brand-primary-glow)' : 'none'
             }}
           />
           {/* Ctrl+K badge (hide when typing) */}
@@ -285,13 +286,13 @@ export default function Navbar({ onOpenSimulator, onToggleMobileNav, isMobileNav
             style={{
               position: 'absolute', top: '100%', left: 0, right: 0,
               background: 'var(--bg-surface)',
-              border: `1px solid ${isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)'}`,
+              border: '1px solid var(--brand-primary)',
               borderTop: 'none',
               borderRadius: '0 0 0.875rem 0.875rem',
-              boxShadow: isDark ? '0 16px 40px rgba(0,0,0,0.8)' : '0 12px 32px rgba(15,23,42,0.12)',
+              boxShadow: 'var(--shadow-lg)',
               maxHeight: '420px',
               overflowY: 'auto',
-              zIndex: 300
+              zIndex: 'var(--z-popover)'
             }}
           >
             {results.length === 0 ? (
@@ -307,8 +308,8 @@ export default function Navbar({ onOpenSimulator, onToggleMobileNav, isMobileNav
                     {/* Group header */}
                     <div style={{
                       padding: '0.5rem 0.875rem 0.25rem',
-                      fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.08em',
-                      textTransform: 'uppercase', color: 'var(--text-caption)',
+                      fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.005em',
+                      textTransform: 'none', color: 'var(--text-caption)',
                       borderTop: group.type !== groups[0].type ? '1px solid var(--border-subtle)' : 'none',
                       marginTop: group.type !== groups[0].type ? '0.25rem' : 0
                     }}>
@@ -327,11 +328,9 @@ export default function Navbar({ onOpenSimulator, onToggleMobileNav, isMobileNav
                             display: 'flex', alignItems: 'center', gap: '0.75rem',
                             padding: '0.55rem 0.875rem',
                             cursor: 'pointer',
-                            background: isActive
-                              ? isDark ? 'rgba(0,242,254,0.08)' : 'var(--bg-surface-subtle)'
-                              : 'transparent',
+                            background: isActive ? 'var(--bg-surface-subtle)' : 'transparent',
                             borderLeft: isActive
-                              ? `2px solid ${isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)'}`
+                              ? '2px solid var(--brand-primary)'
                               : '2px solid transparent',
                             transition: 'background 0.1s ease'
                           }}
@@ -423,8 +422,8 @@ export default function Navbar({ onOpenSimulator, onToggleMobileNav, isMobileNav
           <AlertTriangle size={13} color="#ef4444" style={{ flexShrink: 0 }} />
           <span style={{
             fontSize: '0.72rem',
-            fontWeight: 800,
-            color: '#ef4444',
+            fontWeight: 700,
+            color: 'var(--danger-ink)',
             letterSpacing: '0.04em',
             textTransform: 'uppercase',
             background: 'rgba(239, 68, 68, 0.18)',
@@ -439,7 +438,7 @@ export default function Navbar({ onOpenSimulator, onToggleMobileNav, isMobileNav
           <span style={{
             fontSize: '0.75rem',
             fontWeight: 700,
-            color: '#ef4444',
+            color: 'var(--danger-ink)',
             letterSpacing: '-0.01em'
           }}>
             Wards & Outpatient Understaffed
@@ -453,12 +452,10 @@ export default function Navbar({ onOpenSimulator, onToggleMobileNav, isMobileNav
             style={{
               display: 'flex', alignItems: 'center', gap: '0.4rem',
               padding: '0.4rem 0.75rem',
-              background: pickerOpen
-                ? (isDark ? 'rgba(0,242,254,0.1)' : 'var(--brand-primary-light)')
-                : 'var(--bg-surface-subtle)',
-              border: `1px solid ${pickerOpen ? (isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)') : 'var(--border-color)'}`,
+              background: pickerOpen ? 'var(--brand-primary-light)' : 'var(--bg-surface-subtle)',
+              border: `1px solid ${pickerOpen ? 'var(--brand-primary)' : 'var(--border-color)'}`,
               borderRadius: '0.625rem', fontSize: '0.75rem', fontWeight: 700,
-              color: pickerOpen ? (isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)') : 'var(--text-muted)',
+              color: pickerOpen ? 'var(--brand-primary-ink)' : 'var(--text-muted)',
               cursor: 'pointer', transition: 'all 0.15s ease'
             }}
           >
@@ -475,13 +472,13 @@ export default function Navbar({ onOpenSimulator, onToggleMobileNav, isMobileNav
               background: 'var(--bg-surface)',
               border: '1px solid var(--border-color)',
               borderRadius: '0.875rem',
-              boxShadow: isDark ? '0 16px 40px rgba(0,0,0,0.8)' : '0 12px 32px rgba(15,23,42,0.14)',
+              boxShadow: 'var(--shadow-lg)',
               padding: '1rem',
-              zIndex: 300
+              zIndex: 'var(--z-popover)'
             }}>
               {/* Presets */}
               <div style={{ marginBottom: '0.875rem' }}>
-                <div style={{ fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-caption)', marginBottom: '0.4rem' }}>Quick Select</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.005em', color: 'var(--text-caption)', marginBottom: '0.4rem' }}>Quick select</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
                   {PRESETS.map(p => {
                     const isActive = draft.start === p.start && draft.end === p.end;
@@ -492,9 +489,9 @@ export default function Navbar({ onOpenSimulator, onToggleMobileNav, isMobileNav
                         style={{
                           padding: '0.3rem 0.625rem', borderRadius: '0.5rem',
                           fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
-                          border: `1px solid ${isActive ? (isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)') : 'var(--border-color)'}`,
-                          background: isActive ? (isDark ? 'rgba(0,242,254,0.12)' : 'var(--brand-primary-light)') : 'var(--bg-surface-subtle)',
-                          color: isActive ? (isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)') : 'var(--text-body)',
+                          border: `1px solid ${isActive ? 'var(--brand-primary)' : 'var(--border-color)'}`,
+                          background: isActive ? 'var(--brand-primary-light)' : 'var(--bg-surface-subtle)',
+                          color: isActive ? 'var(--brand-primary-ink)' : 'var(--text-body)',
                           display: 'flex', alignItems: 'center', gap: '0.25rem', transition: 'all 0.15s'
                         }}
                       >
@@ -535,7 +532,7 @@ export default function Navbar({ onOpenSimulator, onToggleMobileNav, isMobileNav
                   ))}
                 </div>
                 {draft.start > draft.end && (
-                  <p style={{ fontSize: '0.6875rem', color: 'var(--brand-rose)', marginTop: '0.4rem' }}>
+                  <p style={{ fontSize: '0.6875rem', color: 'var(--danger-ink)', marginTop: '0.4rem' }}>
                     ⚠ Start month must be before end month
                   </p>
                 )}
@@ -549,8 +546,8 @@ export default function Navbar({ onOpenSimulator, onToggleMobileNav, isMobileNav
                   style={{
                     flex: 1, padding: '0.5rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 700,
                     border: 'none', cursor: draft.start > draft.end ? 'not-allowed' : 'pointer',
-                    background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)',
-                    color: isDark ? '#0a0c10' : '#fff',
+                    background: 'var(--brand-primary)',
+                    color: 'var(--on-primary)',
                     opacity: draft.start > draft.end ? 0.5 : 1, transition: 'all 0.15s'
                   }}
                 >

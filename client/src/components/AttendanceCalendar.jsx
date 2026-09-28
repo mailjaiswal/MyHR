@@ -53,8 +53,8 @@ function DayBody({ r }) {
       <span className="cal-time">{fmtT(r.first_in_time)} – {fmtT(r.last_out_time)}</span>
       <span className="cal-metric"><b>{hours.toFixed(1)}h</b>{ot > 0 ? ` · OT ${ot.toFixed(1)}` : ''}</span>
       <span className="cal-metric" style={{ display: 'flex', gap: '0.125rem 0.375rem', flexWrap: 'wrap' }}>
-        {late > 0 && <span style={{ color: 'var(--brand-amber)' }}>+{late}m late</span>}
-        {early != null && early > 0 && <span style={{ color: 'var(--brand-rose)' }}>-{early}m early</span>}
+        {late > 0 && <span style={{ color: 'var(--warning-ink)' }}>+{late}m late</span>}
+        {early != null && early > 0 && <span style={{ color: 'var(--danger-ink)' }}>-{early}m early</span>}
       </span>
     </>
   );
@@ -127,8 +127,8 @@ export function WeekCards({ records, from, to, onSelect }) {
                   <span className="cal-time">{fmtT(r.last_out_time)}</span>
                   <span className="cal-metric"><b>{metrics(r).hours.toFixed(1)}h</b>{metrics(r).ot > 0 ? ` · OT ${metrics(r).ot.toFixed(1)}h` : ''}</span>
                   <span className="cal-metric" style={{ display: 'flex', gap: '0.125rem 0.375rem', flexWrap: 'wrap' }}>
-                    {metrics(r).late > 0 && <span style={{ color: 'var(--brand-amber)' }}>+{metrics(r).late}m late</span>}
-                    {metrics(r).early != null && metrics(r).early > 0 && <span style={{ color: 'var(--brand-rose)' }}>-{metrics(r).early}m early</span>}
+                    {metrics(r).late > 0 && <span style={{ color: 'var(--warning-ink)' }}>+{metrics(r).late}m late</span>}
+                    {metrics(r).early != null && metrics(r).early > 0 && <span style={{ color: 'var(--danger-ink)' }}>-{metrics(r).early}m early</span>}
                   </span>
                   <span className={`status-pill ${ST_PILL[r.status] || 'status-muted'}`} style={{ alignSelf: 'flex-start', marginTop: 'auto' }}><span>{r.status.replace('_', ' ')}</span></span>
                 </>

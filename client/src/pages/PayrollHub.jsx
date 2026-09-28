@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import MetricCard from '../components/MetricCard';
-import { FileSpreadsheet, Download, RefreshCw, CheckCircle, IndianRupee, Landmark, FileCode, ArrowUpRight } from 'lucide-react';
+import { FileSpreadsheet, Download, RefreshCw, CheckCircle, FileCode, ArrowUpRight } from 'lucide-react';
 
 export default function PayrollHub({ onOpenPayslip }) {
   const [selectedMonth, setSelectedMonth] = useState('2026-08');
@@ -75,7 +75,7 @@ export default function PayrollHub({ onOpenPayslip }) {
             className="input-clean"
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            style={{ width: 'auto', fontWeight: 800 }}
+            style={{ width: 'auto', fontWeight: 600, fontFamily: 'var(--font-heading)' }}
           >
             <option value="2026-08">August 2026 (Finalized)</option>
             <option value="2026-09">September 2026 (Run Live)</option>
@@ -102,7 +102,7 @@ export default function PayrollHub({ onOpenPayslip }) {
           alignItems: 'center',
           gap: '0.5rem',
           fontSize: '0.8125rem',
-          color: 'var(--brand-primary)',
+          color: 'var(--brand-primary-ink)',
           fontWeight: 700
         }}>
           <CheckCircle size={18} />
@@ -116,35 +116,30 @@ export default function PayrollHub({ onOpenPayslip }) {
           title="Total Gross Payout"
           value={`₹${Math.round(totalGross).toLocaleString('en-IN')}`}
           subtitle="Basic, HRA & OT"
-          icon={IndianRupee}
-          color="blue"
+          color="deep"
         />
         <MetricCard
           title="Total EPF (12%)"
           value={`₹${Math.round(totalEpf).toLocaleString('en-IN')}`}
           subtitle="Employee PF Contribution"
-          icon={Landmark}
-          color="amber"
+          color="teal"
         />
         <MetricCard
           title="Total ESIC (0.75%)"
           value={`₹${Math.round(totalEsic).toLocaleString('en-IN')}`}
           subtitle="Gross <= ₹21,000 Staff"
-          icon={FileSpreadsheet}
-          color="indigo"
+          color="mint"
         />
         <MetricCard
           title="MP Professional Tax"
           value={`₹${Math.round(totalPt).toLocaleString('en-IN')}`}
           subtitle="State Statutory Slabs"
-          icon={FileSpreadsheet}
-          color="amber"
+          color="teal"
         />
         <MetricCard
           title="Net Take-Home Disbursal"
           value={`₹${Math.round(totalNet).toLocaleString('en-IN')}`}
           subtitle="Direct Bank NEFT Amount"
-          icon={IndianRupee}
           color="emerald"
           badgeText="Disbursal Ready"
         />
@@ -153,7 +148,7 @@ export default function PayrollHub({ onOpenPayslip }) {
       {/* Banking & Exports Bar */}
       <div className="swaniki-card-flat" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', padding: '1.25rem 1.5rem' }}>
         <div>
-          <h4 style={{ fontSize: '0.9375rem', fontWeight: 800, color: 'var(--text-heading)' }}>
+          <h4 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-heading)' }}>
             Financial Disbursal Soft Files
           </h4>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -225,7 +220,7 @@ export default function PayrollHub({ onOpenPayslip }) {
                     <td>{s.esic_deduction > 0 ? `₹${s.esic_deduction}` : '—'}</td>
                     <td>₹{s.pt_deduction}</td>
                     <td>
-                      <strong style={{ color: 'var(--brand-primary)', fontSize: '0.9375rem' }}>
+                      <strong style={{ color: 'var(--brand-primary-ink)', fontSize: '0.9375rem' }}>
                         ₹{s.net_salary?.toLocaleString('en-IN')}
                       </strong>
                     </td>

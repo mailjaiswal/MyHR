@@ -7,6 +7,7 @@ import MobileNav from './components/MobileNav';
 import PayslipModal from './components/PayslipModal';
 import PasswordChangeModal from './components/PasswordChangeModal';
 import Login from './pages/Login';
+import useSpotlight from './hooks/useSpotlight';
 import { Menu as MenuIcon } from 'lucide-react';
 
 // Pages
@@ -23,6 +24,8 @@ import DemoLab from './pages/DemoLab';
 
 function AppContent() {
   const { user, loading, mustChangePassword, authFetch } = useAuth();
+  // Cursor-tracking card ring - a single delegated listener for the whole shell.
+  useSpotlight(!loading && !!user);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [demoKey, setDemoKey] = useState('simulator');
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
@@ -91,6 +94,7 @@ function AppContent() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">Skip to content</a>
       {isMobileNavOpen && (
         <div className="mobile-overlay" onClick={() => setIsMobileNavOpen(false)} />
       )}
@@ -119,7 +123,7 @@ function AppContent() {
           <span className="mobile-topbar-title">myHR</span>
         </header>
 
-        <main className="main-content-wrapper">
+        <main className="main-content-wrapper" id="main-content">
           {renderPage()}
         </main>
       </div>

@@ -67,7 +67,7 @@ export default function DeviceSimulatorModal({ isOpen, onClose }) {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 50,
+      zIndex: 'var(--z-modal)',
       padding: '1rem'
     }}>
       <div className="swaniki-card" style={{
@@ -90,10 +90,10 @@ export default function DeviceSimulatorModal({ isOpen, onClose }) {
               justifyContent: 'center',
               border: '1px solid rgba(16, 185, 129, 0.3)'
             }}>
-              <Cpu size={20} color="var(--brand-primary)" />
+              <Cpu size={20} color="var(--brand-primary-ink)" />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--text-heading)' }}>
+              <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-heading)' }}>
                 Biometric Hardware Simulator
               </h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>

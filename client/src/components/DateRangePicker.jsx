@@ -42,7 +42,7 @@ export default function DateRangePicker({ dateRange, setMode, setCustom }) {
       )}
 
       {open && dateRange.mode === 'custom' && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 0.25rem)', left: 0, zIndex: 40 }}>
+        <div style={{ position: 'absolute', top: 'calc(100% + 0.25rem)', left: 0, zIndex: 'var(--z-popover)' }}>
           <CalendarRangePicker
             from={dateRange.from}
             to={dateRange.to}

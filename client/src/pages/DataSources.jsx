@@ -8,18 +8,20 @@ import {
   Eye, X, Users, Table2, Calculator, Undo2, IdCard, TriangleAlert, Download
 } from 'lucide-react';
 
+// Status semantics only: emerald = healthy, amber = partial, rose = failed,
+// slate = inert. Text always uses an AA-safe ink, never the bright fill.
 const STATUS_COLOR = {
-  SUCCESS: { bg: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: 'rgba(16,185,129,0.3)' },
-  FAILED: { bg: 'rgba(244, 63, 94, 0.12)', color: '#f43f5e', border: 'rgba(244,63,94,0.3)' },
-  PARTIAL: { bg: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
-  RUNNING: { bg: 'rgba(79, 70, 229, 0.12)', color: '#6366f1', border: 'rgba(79,70,229,0.3)' },
-  ACTIVE: { bg: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: 'rgba(16,185,129,0.3)' },
-  ERROR: { bg: 'rgba(244, 63, 94, 0.12)', color: '#f43f5e', border: 'rgba(244,63,94,0.3)' },
-  REVERTED: { bg: 'rgba(100, 116, 139, 0.16)', color: '#94a3b8', border: 'rgba(100,116,139,0.35)' },
-  FILE_IMPORT: { bg: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
-  API_PULL: { bg: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: 'rgba(16,185,129,0.3)' },
-  MANUAL: { bg: 'rgba(79, 70, 229, 0.12)', color: '#6366f1', border: 'rgba(79,70,229,0.3)' },
-  PAUSED: { bg: 'rgba(100, 116, 139, 0.12)', color: '#64748b', border: 'rgba(100,116,139,0.3)' }
+  SUCCESS: { bg: 'rgba(16, 185, 129, 0.12)', color: 'var(--brand-primary-ink)', border: 'rgba(4, 120, 87, 0.30)' },
+  FAILED: { bg: 'rgba(185, 28, 28, 0.10)', color: 'var(--danger-ink)', border: 'rgba(185, 28, 28, 0.26)' },
+  PARTIAL: { bg: 'rgba(180, 83, 9, 0.12)', color: 'var(--warning-ink)', border: 'rgba(180, 83, 9, 0.26)' },
+  RUNNING: { bg: 'rgba(13, 148, 136, 0.12)', color: 'var(--brand-primary-ink)', border: 'rgba(13, 148, 136, 0.32)' },
+  ACTIVE: { bg: 'rgba(16, 185, 129, 0.12)', color: 'var(--brand-primary-ink)', border: 'rgba(4, 120, 87, 0.30)' },
+  ERROR: { bg: 'rgba(185, 28, 28, 0.10)', color: 'var(--danger-ink)', border: 'rgba(185, 28, 28, 0.26)' },
+  REVERTED: { bg: 'rgba(100, 116, 139, 0.14)', color: 'var(--text-muted)', border: 'rgba(100, 116, 139, 0.32)' },
+  FILE_IMPORT: { bg: 'rgba(13, 148, 136, 0.12)', color: 'var(--brand-primary-ink)', border: 'rgba(13, 148, 136, 0.28)' },
+  API_PULL: { bg: 'rgba(16, 185, 129, 0.12)', color: 'var(--brand-primary-ink)', border: 'rgba(4, 120, 87, 0.30)' },
+  MANUAL: { bg: 'rgba(6, 95, 70, 0.10)', color: 'var(--brand-primary-ink)', border: 'rgba(6, 95, 70, 0.26)' },
+  PAUSED: { bg: 'rgba(100, 116, 139, 0.12)', color: 'var(--text-muted)', border: 'rgba(100, 116, 139, 0.28)' }
 };
 
 function StatusBadge({ status }) {
@@ -41,7 +43,6 @@ const emptyForm = {
 };
 
 export default function DataSources() {
-  const { isDark } = useTheme();
   const { authFetch: fetch, hasPerm } = useAuth();
   const [sources, setSources] = useState([]);
   const [summary, setSummary] = useState({});
@@ -461,14 +462,14 @@ export default function DataSources() {
   };
 
   const card = {
-    background: isDark ? '#111318' : '#ffffff',
+    background: 'var(--bg-surface)',
     border: '1px solid var(--border-color)',
     borderRadius: '0.875rem'
   };
 
   const inputStyle = {
     width: '100%',
-    background: isDark ? '#0d0f13' : '#f8fafc',
+    background: 'var(--bg-surface-subtle)',
     border: '1px solid var(--border-color)',
     borderRadius: '0.5rem',
     padding: '0.55rem 0.75rem',
@@ -478,8 +479,8 @@ export default function DataSources() {
   };
 
   const labelStyle = {
-    fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-caption)',
-    textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem', display: 'block'
+    fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-caption)',
+    letterSpacing: '0.005em', marginBottom: '0.3rem', display: 'block'
   };
 
   return (
@@ -495,8 +496,8 @@ export default function DataSources() {
               Vendor APIs + SQL File Extraction
             </span>
           </div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.03em' }}>
-            Data Sources <em style={{ fontStyle: 'italic', color: isDark ? 'var(--brand-cyan)' : 'var(--brand-indigo)' }}>&amp; Integrations</em>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-heading)', letterSpacing: '-0.03em' }}>
+            Data Sources <em className="highlight-italic">&amp; Integrations</em>
           </h1>
           <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
             Extract punches from biometric SQL database files or pull directly from vendor web-app APIs (ZKTeco BioTime 8.0 / eSSL / Realtime).
@@ -505,7 +506,7 @@ export default function DataSources() {
 
         <button
           className="btn-swaniki btn-swaniki-primary"
-          style={{ padding: '0.5rem 1rem', fontSize: '0.8125rem', background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)', color: isDark ? '#0a0c10' : '#ffffff' }}
+          style={{ padding: '0.5rem 1rem', fontSize: '0.8125rem' }}
           onClick={() => { setShowForm(true); setEditingId(null); setForm(emptyForm); setTestResult(null); }}
         >
           <PlugZap size={16} />
@@ -516,10 +517,10 @@ export default function DataSources() {
       {(message || error) && (
         <div style={{
           padding: '0.75rem 1rem', borderRadius: '0.75rem',
-          background: error ? 'rgba(244, 63, 94, 0.12)' : 'rgba(16, 185, 129, 0.12)',
-          border: `1px solid ${error ? 'rgba(244,63,94,0.3)' : 'rgba(16,185,129,0.3)'}`,
+          background: error ? 'rgba(185, 28, 28, 0.10)' : 'var(--brand-primary-light)',
+          border: `1px solid ${error ? 'rgba(185, 28, 28, 0.26)' : 'rgba(4, 120, 87, 0.28)'}`,
           display: 'flex', alignItems: 'center', gap: '0.5rem',
-          fontSize: '0.8125rem', color: error ? '#f43f5e' : '#10b981', fontWeight: 600
+          fontSize: '0.8125rem', color: error ? 'var(--danger-ink)' : 'var(--brand-primary-ink)', fontWeight: 600
         }}>
           {error ? <XCircle size={16} /> : <CheckCircle2 size={16} />}
           <span>{error || message}</span>
@@ -529,11 +530,11 @@ export default function DataSources() {
       {/* Summary metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '1rem' }}>
         {[
-          { label: 'Total Sources', value: summary.total_sources || 0, icon: Database, color: '#6366f1' },
-          { label: 'API Sources', value: summary.api_sources || 0, icon: Link2, color: '#00f2fe' },
-          { label: 'Sync Runs', value: summary.total_runs || 0, icon: RefreshCw, color: '#10b981' },
-          { label: 'Failed Runs', value: summary.failed_runs || 0, icon: XCircle, color: '#f43f5e' },
-          { label: 'Punches Ingested', value: (summary.total_punches || 0).toLocaleString('en-IN'), icon: HardDrive, color: '#f59e0b' }
+          { label: 'Total Sources', value: summary.total_sources || 0, icon: Database, color: 'var(--brand-primary-ink)' },
+          { label: 'API Sources', value: summary.api_sources || 0, icon: Link2, color: 'var(--brand-primary-ink)' },
+          { label: 'Sync Runs', value: summary.total_runs || 0, icon: RefreshCw, color: 'var(--brand-primary-ink)' },
+          { label: 'Failed Runs', value: summary.failed_runs || 0, icon: XCircle, color: 'var(--danger-ink)' },
+          { label: 'Punches Ingested', value: (summary.total_punches || 0).toLocaleString('en-IN'), icon: HardDrive, color: 'var(--brand-primary-ink)' }
         ].map(m => {
           const Icon = m.icon;
           return (
@@ -543,9 +544,9 @@ export default function DataSources() {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Icon size={15} color={m.color} style={{ flexShrink: 0 }} />
-                <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-caption)', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.label}</span>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-caption)', letterSpacing: '0.005em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.label}</span>
               </div>
-              <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em', lineHeight: 1.15 }}>{m.value}</span>
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-heading)', letterSpacing: '-0.03em', lineHeight: 1.15 }}>{m.value}</span>
             </div>
           );
         })}
@@ -556,7 +557,7 @@ export default function DataSources() {
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-heading)' }}>
-              <Settings2 size={16} color="var(--brand-primary)" />
+              <Settings2 size={16} color="var(--brand-primary-ink)" />
               {editingId ? 'Edit Data Source' : 'Connect a Data Source'}
             </div>
             <button onClick={() => setShowForm(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
@@ -687,7 +688,7 @@ export default function DataSources() {
             )}
 
             <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button type="submit" className="btn-swaniki" style={{ background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)', color: isDark ? '#0a0c10' : '#fff', padding: '0.55rem 1.25rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <button type="submit" className="btn-swaniki" style={{ background: 'var(--brand-primary)', color: 'var(--on-primary)', padding: '0.55rem 1.25rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 {busy === 'SAVE' ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />}
                 {editingId ? 'Save Changes' : 'Create Source'}
               </button>
@@ -699,7 +700,7 @@ export default function DataSources() {
             </div>
 
             {testResult && testResult.id === editingId && (
-              <div style={{ padding: '0.75rem 1rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 600, background: testResult.ok ? 'rgba(16,185,129,0.1)' : 'rgba(244,63,94,0.1)', color: testResult.ok ? '#10b981' : '#f43f5e', border: `1px solid ${testResult.ok ? 'rgba(16,185,129,0.3)' : 'rgba(244,63,94,0.3)'}` }}>
+              <div style={{ padding: '0.75rem 1rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 600, background: testResult.ok ? 'var(--brand-primary-light)' : 'rgba(185,28,28,0.10)', color: testResult.ok ? 'var(--brand-primary-ink)' : 'var(--danger-ink)', border: `1px solid ${testResult.ok ? 'rgba(4,120,87,0.28)' : 'rgba(185,28,28,0.26)'}` }}>
                 {testResult.ok ? `Connection OK • auth ${testResult.data.tokenType} • ${testResult.data.devicesFound} device(s) found on vendor server.` : `Connection failed: ${testResult.data.error}`}
               </div>
             )}
@@ -712,7 +713,7 @@ export default function DataSources() {
         {/* Source cards */}
         <div style={card}>
           <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-heading)' }}>
-            <Server size={16} color="var(--brand-primary)" />
+            <Server size={16} color="var(--brand-primary-ink)" />
             Connected Data Sources ({sources.length})
           </div>
           <div style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '420px', overflowY: 'auto' }}>
@@ -729,10 +730,10 @@ export default function DataSources() {
               const canSync = isApi || (!!src.base_url && !!opts.autoFetch);
               const testFor = testResult && testResult.id === src.id ? testResult : null;
               return (
-                <div key={src.id} style={{ padding: '0.9rem 1rem', borderRadius: '0.625rem', border: '1px solid var(--border-color)', background: isDark ? '#0d0f13' : '#f8fafc', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                <div key={src.id} style={{ padding: '0.9rem 1rem', borderRadius: '0.625rem', border: '1px solid var(--border-color)', background: 'var(--bg-surface-subtle)', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
-                      {isApi ? <Link2 size={17} color="#00f2fe" style={{ flexShrink: 0 }} /> : <FileText size={17} color="#f59e0b" style={{ flexShrink: 0 }} />}
+                      {isApi ? <Link2 size={17} color="var(--brand-primary-ink)" style={{ flexShrink: 0 }} /> : <FileText size={17} color="var(--brand-primary-ink)" style={{ flexShrink: 0 }} />}
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-heading)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{src.name}</div>
                         <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{src.vendor} • {isApi ? src.base_url : (src.base_url ? 'SQL_FILE • auto-fetch' : 'SQL_FILE • upload only')}</div>
@@ -750,25 +751,25 @@ export default function DataSources() {
 
                   <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                     {isApi && (
-                      <button className="btn-swaniki" style={{ ...miniBtn, color: '#10b981', border: '1px solid rgba(16,185,129,0.35)' }} disabled={busy} onClick={() => handleTest(src)}>
+                      <button className="btn-swaniki" style={{ ...miniBtn, color: 'var(--brand-primary-ink)', border: '1px solid rgba(4,120,87,0.35)' }} disabled={busy} onClick={() => handleTest(src)}>
                         {busy === `TEST_${src.id}` ? <Loader2 size={13} className="spin" /> : <Wifi size={13} />} Test
                       </button>
                     )}
                     {canSync && (
-                      <button className="btn-swaniki" style={{ ...miniBtn, color: 'var(--brand-primary)', border: '1px solid rgba(79,70,229,0.35)' }} disabled={busy} onClick={() => handleSync(src)}>
+                      <button className="btn-swaniki" style={{ ...miniBtn, color: 'var(--brand-primary-ink)', border: '1px solid rgba(4,120,87,0.35)' }} disabled={busy} onClick={() => handleSync(src)}>
                         {busy === `SYNC_${src.id}` ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />} {isApi ? 'Sync Now' : 'Fetch Now'}
                       </button>
                     )}
                     <button className="btn-swaniki" style={{ ...miniBtn, color: 'var(--text-muted)', border: '1px solid var(--border-color)' }} disabled={busy} onClick={() => openEdit(src)}>
                       <Pencil size={13} /> Edit
                     </button>
-                    <button className="btn-swaniki" style={{ ...miniBtn, color: '#f43f5e', border: '1px solid rgba(244,63,94,0.35)' }} disabled={busy} onClick={() => handleDelete(src)}>
+                    <button className="btn-swaniki" style={{ ...miniBtn, color: 'var(--danger-ink)', border: '1px solid rgba(185,28,28,0.3)' }} disabled={busy} onClick={() => handleDelete(src)}>
                       <Trash2 size={13} /> Delete
                     </button>
                   </div>
 
                   {testFor && (
-                    <div style={{ fontSize: '0.72rem', fontWeight: 600, color: testFor.ok ? '#10b981' : '#f43f5e' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 600, color: testFor.ok ? 'var(--brand-primary-ink)' : 'var(--danger-ink)' }}>
                       {testFor.ok ? `✓ Reachable — ${testFor.data.devicesFound} device(s)` : `✗ ${testFor.data.error}`}
                     </div>
                   )}
@@ -781,7 +782,7 @@ export default function DataSources() {
         {/* SQL file upload */}
         <div style={card}>
           <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-heading)' }}>
-            <UploadCloud size={16} color="#f59e0b" />
+            <UploadCloud size={16} color="var(--brand-primary-ink)" />
             Import Biometric Machine File (ATTLOG .dat / SQL)
           </div>
           <form onSubmit={handlePreview} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -799,7 +800,7 @@ export default function DataSources() {
                 padding: '1.75rem 1rem', borderRadius: '0.625rem', border: `2px dashed ${file ? 'rgba(16,185,129,0.5)' : 'var(--border-color)'}`,
                 background: file ? 'rgba(16,185,129,0.06)' : 'transparent', cursor: 'pointer', textAlign: 'center'
               }}>
-                <HardDrive size={26} color={file ? '#10b981' : 'var(--text-caption)'} />
+                <HardDrive size={26} color={file ? 'var(--brand-primary-ink)' : 'var(--text-caption)'} />
                 <span style={{ fontSize: '0.8125rem', color: 'var(--text-heading)', fontWeight: 600 }}>
                   {file ? file.name : 'Click to choose _attlog.dat / .db / .sqlite / .sql file'}
                 </span>
@@ -838,7 +839,7 @@ export default function DataSources() {
               className="btn-swaniki"
               style={{
                 padding: '0.6rem 1.25rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem', cursor: previewing || !file ? 'not-allowed' : 'pointer',
-                background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)', color: isDark ? '#0a0c10' : '#fff', opacity: !file || previewing ? 0.5 : 1,
+                background: 'var(--brand-primary)', color: 'var(--on-primary)', opacity: !file || previewing ? 0.5 : 1,
                 display: 'flex', alignItems: 'center', gap: '0.4rem', width: 'max-content'
               }}
             >
@@ -848,14 +849,14 @@ export default function DataSources() {
 
             {importResult && (
               <div style={{ padding: '1rem', borderRadius: '0.625rem', border: '1px solid rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.07)', display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--text-body)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#10b981', fontWeight: 700 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--brand-primary-ink)', fontWeight: 700 }}>
                   <CheckCircle2 size={15} /> Import successful
                 </div>
                 <div>Punches found: <strong>{importResult.import.recordsFound}</strong> • Imported: <strong>{importResult.import.recordsImported}</strong> • Skipped: <strong>{importResult.import.recordsSkipped}</strong></div>
                 <div>Employees auto-created: <strong>{importResult.import.employeesCreated}</strong> • Devices auto-created: <strong>{importResult.import.devicesCreated}</strong></div>
                 {importResult.detectedTables?.length ? <div>Detected tables: <strong style={{ color: 'var(--text-heading)' }}>{importResult.detectedTables.join(', ')}</strong></div> : null}
                 {importResult.import.message && <div style={{ color: 'var(--text-muted)' }}>{importResult.import.message}</div>}
-                {importResult.import.status === 'PARTIAL' && <div style={{ color: '#f59e0b' }}>{importResult.import.message}</div>}
+                {importResult.import.status === 'PARTIAL' && <div style={{ color: 'var(--warning-ink)' }}>{importResult.import.message}</div>}
               </div>
             )}
           </form>
@@ -865,7 +866,7 @@ export default function DataSources() {
       {/* Roster / employee-name CSV — attaches real names, department and shift to auto-created "Staff #NN" records */}
       <div style={card}>
         <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-heading)' }}>
-          <IdCard size={16} color="#10b981" />
+          <IdCard size={16} color="var(--brand-primary-ink)" />
           Roster / Employee Name CSV
         </div>
         <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -882,7 +883,7 @@ export default function DataSources() {
               background: rosterRows ? 'rgba(16,185,129,0.06)' : 'transparent',
               fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-heading)', cursor: 'pointer'
             }}>
-              <UploadCloud size={16} color={rosterRows ? '#10b981' : 'var(--text-caption)'} />
+              <UploadCloud size={16} color={rosterRows ? 'var(--brand-primary-ink)' : 'var(--text-caption)'} />
               {rosterName || 'Choose roster .csv file'}
               <input type="file" accept=".csv,.txt" style={{ display: 'none' }} onChange={handleRosterFile} />
             </label>
@@ -905,7 +906,7 @@ export default function DataSources() {
           </div>
 
           {canEdit && setup.employeeCount > 0 && (
-            <p style={{ fontSize: '0.72rem', color: 'var(--brand-amber)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <p style={{ fontSize: '0.72rem', color: 'var(--warning-ink)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <TriangleAlert size={13} /> {setup.employeeCount} employee(s) already on file — bulk upload is for first-time
               onboarding; add or edit individual staff in the Employees panel.
             </p>
@@ -919,8 +920,8 @@ export default function DataSources() {
               style={{
                 padding: '0.55rem 1.1rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem',
                 cursor: !rosterRows || rosterBusy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
-                background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)',
-                color: isDark ? '#0a0c10' : '#fff', opacity: !rosterRows || rosterBusy ? 0.5 : 1
+                background: 'var(--brand-primary)',
+                color: 'var(--on-primary)', opacity: !rosterRows || rosterBusy ? 0.5 : 1
               }}
             >
               {rosterBusy ? <Loader2 size={15} className="spin" /> : <Eye size={15} />}
@@ -934,7 +935,7 @@ export default function DataSources() {
                 style={{
                   padding: '0.55rem 1.1rem', fontSize: '0.8125rem', fontWeight: 700, borderRadius: '0.5rem',
                   cursor: rosterBusy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
-                  background: 'rgba(16,185,129,0.14)', color: '#10b981', opacity: rosterBusy ? 0.6 : 1,
+                  background: 'rgba(16,185,129,0.14)', color: 'var(--brand-primary-ink)', opacity: rosterBusy ? 0.6 : 1,
                   border: '1px solid rgba(16,185,129,0.35)'
                 }}
               >
@@ -949,15 +950,15 @@ export default function DataSources() {
               Expected headers (any order): Biometric ID / PIN, Name, Designation, Department, Shift, Email, Mobile, Base CTC, DOJ, Gender
             </span>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--text-caption)', textTransform: 'uppercase' }}>Departments</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-caption)' }}>Departments</span>
               {setup.departments.map(d => (
-                <code key={d.id} className="mono" style={{ fontSize: '0.6875rem', padding: '0.1rem 0.4rem', borderRadius: '0.35rem', background: isDark ? '#0d0f13' : '#f1f5f9', color: 'var(--text-body)', border: '1px solid var(--border-color)' }}>{d.name}</code>
+                <code key={d.id} className="mono" style={{ fontSize: '0.6875rem', padding: '0.1rem 0.4rem', borderRadius: '0.35rem', background: 'var(--bg-surface-subtle)', color: 'var(--text-body)', border: '1px solid var(--border-color)' }}>{d.name}</code>
               ))}
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--text-caption)', textTransform: 'uppercase' }}>Shifts</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-caption)' }}>Shifts</span>
               {setup.shifts.map(s => (
-                <code key={s.id} className="mono" style={{ fontSize: '0.6875rem', padding: '0.1rem 0.4rem', borderRadius: '0.35rem', background: isDark ? '#0d0f13' : '#f1f5f9', color: 'var(--text-body)', border: '1px solid var(--border-color)' }}>{String(s.name).split(' (')[0]}</code>
+                <code key={s.id} className="mono" style={{ fontSize: '0.6875rem', padding: '0.1rem 0.4rem', borderRadius: '0.35rem', background: 'var(--bg-surface-subtle)', color: 'var(--text-body)', border: '1px solid var(--border-color)' }}>{String(s.name).split(' (')[0]}</code>
               ))}
             </div>
             <span style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }}>
@@ -970,13 +971,13 @@ export default function DataSources() {
       {/* Sync logs */}
       <div style={card}>
         <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-heading)' }}>
-          <RefreshCw size={16} color="var(--brand-primary)" />
+          <RefreshCw size={16} color="var(--brand-primary-ink)" />
           Recent Sync Activity
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
             <thead>
-              <tr style={{ background: isDark ? '#0d0f13' : '#f8fafc' }}>
+              <tr style={{ background: 'var(--bg-surface-subtle)' }}>
                 {['Time', 'Source', 'Type', 'Status', 'Found', 'Imported', 'Skipped', 'Message', ''].map(h => (
                   <th key={h} style={{ textAlign: 'left', padding: '0.6rem 0.9rem', color: 'var(--text-caption)', fontWeight: 600, textTransform: 'uppercase', fontSize: '0.625rem', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
@@ -993,7 +994,7 @@ export default function DataSources() {
                   <td style={{ padding: '0.6rem 0.9rem' }}><StatusBadge status={l.sync_type} /></td>
                   <td style={{ padding: '0.6rem 0.9rem' }}><StatusBadge status={l.status} /></td>
                   <td style={{ padding: '0.6rem 0.9rem', textAlign: 'center' }}>{l.records_found}</td>
-                  <td style={{ padding: '0.6rem 0.9rem', textAlign: 'center', fontWeight: 700, color: '#10b981' }}>{l.records_imported}</td>
+                  <td style={{ padding: '0.6rem 0.9rem', textAlign: 'center', fontWeight: 700, color: 'var(--brand-primary-ink)' }}>{l.records_imported}</td>
                   <td style={{ padding: '0.6rem 0.9rem', textAlign: 'center', color: 'var(--text-muted)' }}>{l.records_skipped}</td>
                   <td style={{ padding: '0.6rem 0.9rem', color: 'var(--text-muted)', maxWidth: '320px' }}>{l.message}</td>
                   <td style={{ padding: '0.6rem 0.9rem', whiteSpace: 'nowrap' }}>
@@ -1002,7 +1003,7 @@ export default function DataSources() {
                       : (canEdit && (l.tagged_punches || 0) > 0 ? (
                         <button
                           className="btn-swaniki"
-                          style={{ ...miniBtn, color: '#f43f5e', border: '1px solid rgba(244,63,94,0.35)' }}
+                          style={{ ...miniBtn, color: 'var(--danger-ink)', border: '1px solid rgba(244,63,94,0.35)' }}
                           disabled={Boolean(busy)}
                           onClick={() => handleRevert(l)}
                           title={`Undo this import — removes its ${l.tagged_punches} tagged punch(es) and rebuilds attendance`}
@@ -1026,7 +1027,7 @@ export default function DataSources() {
       {canEdit && (
         <div style={card}>
           <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-heading)' }}>
-            <Calculator size={16} color="#6366f1" />
+            <Calculator size={16} color="var(--brand-primary-ink)" />
             Recompute Attendance
           </div>
           <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -1052,8 +1053,8 @@ export default function DataSources() {
                 style={{
                   padding: '0.55rem 1.1rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem',
                   cursor: busy === 'RECOMPUTE' ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
-                  background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)',
-                  color: isDark ? '#0a0c10' : '#fff', opacity: busy === 'RECOMPUTE' ? 0.6 : 1
+                  background: 'var(--brand-primary)',
+                  color: 'var(--on-primary)', opacity: busy === 'RECOMPUTE' ? 0.6 : 1
                 }}
               >
                 {busy === 'RECOMPUTE' ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
@@ -1079,14 +1080,14 @@ export default function DataSources() {
           <div className="modal-card" style={{ width: '100%', maxWidth: '30rem', padding: 0 }} onClick={e => e.stopPropagation()}>
             <div className="modal-head" style={{ padding: '1rem 1.25rem' }}>
               <div>
-                <span className="eyebrow" style={{ color: 'var(--brand-amber)' }}>First-time onboarding check</span>
+                <span className="eyebrow" style={{ color: 'var(--warning-ink)' }}>First-time onboarding check</span>
                 <h3 style={{ margin: 0 }}>Bulk roster upload?</h3>
               </div>
               <button className="icon-btn" onClick={() => { setRosterGate(null); setRosterName(''); }}><X size={17} /></button>
             </div>
             <div style={{ padding: '1rem 1.25rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
               <div style={{ display: 'flex', gap: '0.625rem', alignItems: 'flex-start' }}>
-                <TriangleAlert size={17} style={{ color: 'var(--brand-amber)', flex: 'none', marginTop: 2 }} />
+                <TriangleAlert size={17} style={{ color: 'var(--warning-ink)', flex: 'none', marginTop: 2 }} />
                 <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>
                   This path is meant for <strong>first-time onboarding</strong>. {setup.employeeCount} employee
                   {setup.employeeCount === 1 ? '' : 's'} already {setup.employeeCount === 1 ? 'exists' : 'exist'} in the
@@ -1122,9 +1123,9 @@ export default function DataSources() {
 // Editable preview table shared by the punch-file and roster modals.
 function PreviewTable({ columns, rows }) {
   const { isDark } = useTheme();
-  const headBg = isDark ? '#0d0f13' : '#f8fafc';
+  const headBg = 'var(--bg-surface-subtle)';
   return (
-    <div style={{ overflow: 'auto', maxHeight: '52vh', border: '1px solid var(--border-color)', borderRadius: '0.625rem' }}>
+    <div style={{ overflow: 'auto', maxHeight: '52dvh', border: '1px solid var(--border-color)', borderRadius: '0.625rem' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
         <thead style={{ position: 'sticky', top: 0, background: headBg, zIndex: 1 }}>
           <tr>
@@ -1159,17 +1160,17 @@ function renderPreviewCell(col, v) {
 }
 
 const ACTION_TONE = {
-  green: { bg: 'rgba(16,185,129,0.14)', color: '#10b981', border: 'rgba(16,185,129,0.3)' },
-  amber: { bg: 'rgba(245,158,11,0.14)', color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
-  red: { bg: 'rgba(244,63,94,0.14)', color: '#f43f5e', border: 'rgba(244,63,94,0.3)' },
-  slate: { bg: 'rgba(100,116,139,0.14)', color: '#94a3b8', border: 'rgba(100,116,139,0.3)' }
+  green: { bg: 'rgba(16,185,129,0.14)', color: 'var(--brand-primary-ink)', border: 'rgba(4,120,87,0.3)' },
+  amber: { bg: 'rgba(180,83,9,0.12)', color: 'var(--warning-ink)', border: 'rgba(180,83,9,0.28)' },
+  red: { bg: 'rgba(185,28,28,0.12)', color: 'var(--danger-ink)', border: 'rgba(185,28,28,0.26)' },
+  slate: { bg: 'rgba(100,116,139,0.14)', color: 'var(--text-muted)', border: 'rgba(100,116,139,0.3)' }
 };
 
 function ActionPill({ label, tone }) {
   const t = ACTION_TONE[tone] || ACTION_TONE.slate;
   return (
     <span style={{
-      fontSize: '0.62rem', fontWeight: 700, padding: '0.12rem 0.45rem', borderRadius: '9999px', textTransform: 'uppercase',
+      fontSize: '0.6875rem', fontWeight: 700, padding: '0.12rem 0.45rem', borderRadius: '9999px', textTransform: 'uppercase',
       background: t.bg, color: t.color, border: `1px solid ${t.border}`
     }}>{label}</span>
   );
@@ -1185,9 +1186,8 @@ function actionTone(status) {
 
 // Server-classified roster preview: which employees will be updated / created / rejected.
 function RosterPreviewModal({ preview, busy, canApply, onClose, onApply }) {
-  const { isDark } = useTheme();
-  const bg = isDark ? '#111318' : '#ffffff';
-  const headBg = isDark ? '#0d0f13' : '#f8fafc';
+  const bg = 'var(--bg-surface)';
+  const headBg = 'var(--bg-surface-subtle)';
   useEscapeClose(!busy, onClose);
 
   const columns = preview.columns.map(c => (c.key === 'status'
@@ -1195,22 +1195,22 @@ function RosterPreviewModal({ preview, busy, canApply, onClose, onApply }) {
     : c));
 
   const stats = [
-    { label: 'Rows', value: preview.summary.total, color: '#6366f1' },
-    { label: 'Will update', value: preview.summary.willUpdate, color: '#10b981' },
-    { label: 'Will create', value: preview.summary.willCreate, color: '#f59e0b' },
-    { label: 'Errors', value: preview.summary.errors, color: preview.summary.errors ? '#f43f5e' : '#10b981' }
+    { label: 'Rows', value: preview.summary.total, color: 'var(--text-heading)' },
+    { label: 'Will update', value: preview.summary.willUpdate, color: 'var(--brand-primary-ink)' },
+    { label: 'Will create', value: preview.summary.willCreate, color: 'var(--warning-ink)' },
+    { label: 'Errors', value: preview.summary.errors, color: preview.summary.errors ? 'var(--danger-ink)' : 'var(--text-muted)' }
   ];
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 'min(1100px, 100%)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', background: bg, border: '1px solid var(--border-color)', borderRadius: '1rem', overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 'var(--z-modal)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 'min(1100px, 100%)', maxHeight: '92dvh', display: 'flex', flexDirection: 'column', background: bg, border: '1px solid var(--border-color)', borderRadius: '1rem', overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
         <div style={{ padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
               <span className="pill-badge pill-indigo" style={{ fontSize: '0.62rem' }}>ROSTER CSV</span>
               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Review before applying · nothing has been written yet</span>
             </div>
-            <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-heading)' }}>Roster match preview</h2>
+            <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-heading)' }}>Roster match preview</h2>
           </div>
           <button onClick={onClose} disabled={busy} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: busy ? 'not-allowed' : 'pointer' }}><X size={20} /></button>
         </div>
@@ -1218,15 +1218,15 @@ function RosterPreviewModal({ preview, busy, canApply, onClose, onApply }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', padding: '1rem 1.4rem', borderBottom: '1px solid var(--border-color)' }}>
           {stats.map(s => (
             <div key={s.label} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-caption)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</span>
-              <span style={{ fontSize: '1.35rem', fontWeight: 800, color: s.color, lineHeight: 1 }}>{Number(s.value || 0).toLocaleString('en-IN')}</span>
+              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-caption)', letterSpacing: '0.005em' }}>{s.label}</span>
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.35rem', fontWeight: 600, color: s.color, lineHeight: 1, letterSpacing: '-0.02em' }}>{Number(s.value || 0).toLocaleString('en-IN')}</span>
             </div>
           ))}
         </div>
 
         <div style={{ padding: '1rem 1.4rem', overflow: 'hidden', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
           {/\(unknown\)/.test(JSON.stringify(preview.rows)) && (
-            <p style={{ margin: 0, fontSize: '0.72rem', color: '#f59e0b', fontWeight: 600 }}>
+            <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--warning-ink)', fontWeight: 600 }}>
               Some department / shift names were not found in the setup — those cells will be left unchanged on apply.
             </p>
           )}
@@ -1241,7 +1241,7 @@ function RosterPreviewModal({ preview, busy, canApply, onClose, onApply }) {
             Cancel
           </button>
           {canApply && (
-            <button className="btn-swaniki" onClick={onApply} disabled={busy} style={{ background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)', color: isDark ? '#0a0c10' : '#fff', padding: '0.5rem 1.25rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem', cursor: busy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', opacity: busy ? 0.6 : 1 }}>
+            <button className="btn-swaniki" onClick={onApply} disabled={busy} style={{ background: 'var(--brand-primary)', color: 'var(--on-primary)', padding: '0.5rem 1.25rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem', cursor: busy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', opacity: busy ? 0.6 : 1 }}>
               {busy ? <Loader2 size={15} className="spin" /> : <CheckCircle2 size={15} />}
               {busy ? 'Applying…' : 'Confirm & Apply'}
             </button>
@@ -1254,27 +1254,26 @@ function RosterPreviewModal({ preview, busy, canApply, onClose, onApply }) {
 
 // Full-page preview table for a parsed (but not yet imported) biometric file.
 function FilePreviewModal({ preview, uploading, onClose, onConfirm }) {
-  const { isDark } = useTheme();
   const [sheet, setSheet] = useState('punches');
   const hasEmployees = Array.isArray(preview.employees) && preview.employees.length > 0;
   useEscapeClose(!uploading, onClose);
 
-  const bg = isDark ? '#111318' : '#ffffff';
-  const headBg = isDark ? '#0d0f13' : '#f8fafc';
+  const bg = 'var(--bg-surface)';
+  const headBg = 'var(--bg-surface-subtle)';
 
   const stats = [
-    { label: 'Rows', value: preview.totalRows, color: '#6366f1' },
-    { label: 'Distinct users', value: preview.distinctUsers, color: '#00f2fe' },
-    { label: 'Matched employees', value: preview.knownUsers, color: '#10b981' },
-    { label: 'New (will be created)', value: preview.newUsers, color: preview.newUsers > 0 ? '#f59e0b' : '#10b981' }
+    { label: 'Rows', value: preview.totalRows, color: 'var(--text-heading)' },
+    { label: 'Distinct users', value: preview.distinctUsers, color: 'var(--text-heading)' },
+    { label: 'Matched employees', value: preview.knownUsers, color: 'var(--brand-primary-ink)' },
+    { label: 'New (will be created)', value: preview.newUsers, color: preview.newUsers > 0 ? 'var(--warning-ink)' : 'var(--brand-primary-ink)' }
   ];
-  if (preview.skippedRows) stats.push({ label: 'Skipped rows', value: preview.skippedRows, color: '#f43f5e' });
+  if (preview.skippedRows) stats.push({ label: 'Skipped rows', value: preview.skippedRows, color: 'var(--danger-ink)' });
 
   const empColumns = [{ key: 'biometricUserId', label: 'User ID' }, { key: 'fullName', label: 'Name' }, { key: 'known', label: 'Employee' }];
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 'min(1100px, 100%)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', background: bg, border: '1px solid var(--border-color)', borderRadius: '1rem', overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 'var(--z-modal)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 'min(1100px, 100%)', maxHeight: '92dvh', display: 'flex', flexDirection: 'column', background: bg, border: '1px solid var(--border-color)', borderRadius: '1rem', overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
         {/* Header */}
         <div style={{ padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
           <div>
@@ -1282,7 +1281,7 @@ function FilePreviewModal({ preview, uploading, onClose, onConfirm }) {
               <span className="pill-badge pill-indigo" style={{ fontSize: '0.62rem' }}>{preview.format === 'ATTLOG' ? 'ATTLOG .dat' : 'SQL FILE'}</span>
               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Review before import · nothing has been written yet</span>
             </div>
-            <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-heading)' }}>
+            <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-heading)' }}>
               {preview.fileName || (preview.punchTable ? `Punches from ${preview.punchTable}` : 'File preview')}
             </h2>
             <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
@@ -1299,8 +1298,8 @@ function FilePreviewModal({ preview, uploading, onClose, onConfirm }) {
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(140px, 1fr))`, gap: '0.75rem', padding: '1rem 1.4rem', borderBottom: '1px solid var(--border-color)' }}>
           {stats.map(s => (
             <div key={s.label} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-caption)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</span>
-              <span style={{ fontSize: '1.35rem', fontWeight: 800, color: s.color, lineHeight: 1 }}>{Number(s.value || 0).toLocaleString('en-IN')}</span>
+              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-caption)', letterSpacing: '0.005em' }}>{s.label}</span>
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.35rem', fontWeight: 600, color: s.color, lineHeight: 1, letterSpacing: '-0.02em' }}>{Number(s.value || 0).toLocaleString('en-IN')}</span>
             </div>
           ))}
         </div>
@@ -1316,7 +1315,7 @@ function FilePreviewModal({ preview, uploading, onClose, onConfirm }) {
         {/* Table */}
         <div style={{ padding: '1rem 1.4rem', overflow: 'hidden', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
           {preview.shownRows < preview.totalRows && (
-            <p style={{ margin: 0, fontSize: '0.72rem', color: '#f59e0b', fontWeight: 600 }}>
+            <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--warning-ink)', fontWeight: 600 }}>
               Showing the first {preview.shownRows.toLocaleString('en-IN')} of {preview.totalRows.toLocaleString('en-IN')} rows — all {preview.totalRows.toLocaleString('en-IN')} will be imported on confirm.
             </p>
           )}
@@ -1333,7 +1332,7 @@ function FilePreviewModal({ preview, uploading, onClose, onConfirm }) {
           <button className="btn-swaniki" onClick={onClose} disabled={uploading} style={{ background: 'transparent', color: 'var(--text-muted)', padding: '0.5rem 1rem', fontSize: '0.8125rem', fontWeight: 600, border: '1px solid var(--border-color)', borderRadius: '0.5rem', cursor: uploading ? 'not-allowed' : 'pointer' }}>
             Cancel
           </button>
-          <button className="btn-swaniki" onClick={onConfirm} disabled={uploading} style={{ background: isDark ? 'var(--brand-cyan)' : 'var(--brand-primary)', color: isDark ? '#0a0c10' : '#fff', padding: '0.5rem 1.25rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem', cursor: uploading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', opacity: uploading ? 0.6 : 1 }}>
+          <button className="btn-swaniki" onClick={onConfirm} disabled={uploading} style={{ background: 'var(--brand-primary)', color: 'var(--on-primary)', padding: '0.5rem 1.25rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem', cursor: uploading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', opacity: uploading ? 0.6 : 1 }}>
             {uploading ? <Loader2 size={15} className="spin" /> : <CheckCircle2 size={15} />}
             {uploading ? 'Importing…' : 'Confirm & Import'}
           </button>
