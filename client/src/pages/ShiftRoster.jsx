@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useOrganization } from '../context/OrganizationContext';
-import { Clock, ShieldCheck, AlertCircle, Moon, Sun, Sunrise, Sunset, Edit3, Save, X, Check, Calendar, Settings2 } from 'lucide-react';
+import { Clock, ShieldCheck, AlertCircle, Moon, Sun, Sunrise, Sunset, Edit3, Save, X, Check, Calendar, Settings2, RefreshCw, FileDown } from 'lucide-react';
 import Shift24HourTimeline from '../components/Shift24HourTimeline';
+import RosterPrintModal from '../components/RosterPrintModal';
 
 export default function ShiftRoster({ onNavigate }) {
   const { org } = useOrganization();
@@ -20,15 +21,23 @@ export default function ShiftRoster({ onNavigate }) {
   const [saveStatus, setSaveStatus] = useState(null);
   const [busyEmp, setBusyEmp] = useState(null);
   const [assignMsg, setAssignMsg] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showPrint, setShowPrint] = useState(false);
 
-  const loadData = () => {
-    fetch('/api/v1/organization/shifts')
-      .then(r => r.json())
-      .then(d => { if (d.success) setShifts(d.shifts); });
-
-    fetch('/api/v1/organization/employees')
-      .then(r => r.json())
-      .then(d => { if (d.success) setEmployees(d.employees); });
+  const loadData = async () => {
+    setRefreshing(true);
+    try {
+      const [shiftsRes, empsRes] = await Promise.all([
+        fetch('/api/v1/organization/shifts').then(r => r.json()),
+        fetch('/api/v1/organization/employees').then(r => r.json()),
+      ]);
+      if (shiftsRes.success) setShifts(shiftsRes.shifts);
+      if (empsRes.success) setEmployees(empsRes.employees);
+    } catch (err) {
+      console.error('Failed to load roster data:', err);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   useEffect(() => {
@@ -111,14 +120,33 @@ export default function ShiftRoster({ onNavigate }) {
             <span className="eyebrow-italic">24×7 Workforce Continuity</span>
           </div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-heading)', letterSpacing: '-0.025em' }}>
-            24×7 <em className="highlight-italic">Rotational Shift Roster</em>
+            24-Hour <em className="highlight-italic">Shift Coverage Matrix</em>
           </h1>
           <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-            Flexible shift configuration for Super Admin with dynamic cross-midnight duty date resolution.
+            Live shift configuration and staff coverage, with dynamic cross-midnight duty date resolution.
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button
+            className="btn-swaniki btn-swaniki-ghost"
+            onClick={loadData}
+            disabled={refreshing}
+            title="Reload shifts and staff assignments from the database"
+            style={{ fontSize: '0.75rem', padding: '0.45rem 0.75rem', opacity: refreshing ? 0.6 : 1 }}
+          >
+            <RefreshCw size={14} style={{ marginRight: '0.35rem', verticalAlign: '-2px', animation: refreshing ? 'rotate 0.8s linear infinite' : 'none' }} />
+            <span>{refreshing ? 'Refreshing…' : 'Refresh'}</span>
+          </button>
+          <button
+            className="btn-swaniki btn-swaniki-primary"
+            onClick={() => setShowPrint(true)}
+            title="Preview and print / export the roster for the upcoming period"
+            style={{ fontSize: '0.75rem', padding: '0.45rem 0.75rem' }}
+          >
+            <FileDown size={14} style={{ marginRight: '0.35rem', verticalAlign: '-2px' }} />
+            <span>Print / Export Roster</span>
+          </button>
           {(canAssign || isSuperAdmin) && onNavigate && (
             <button
               className="btn-swaniki btn-swaniki-ghost"
@@ -162,7 +190,7 @@ export default function ShiftRoster({ onNavigate }) {
       )}
 
       {/* Visual 24-Hour Coverage Matrix with Overlaps */}
-      <Shift24HourTimeline />
+      <Shift24HourTimeline shifts={shifts} employees={employees} loading={refreshing && !shifts.length} />
 
       {/* Threshold Policies Banner */}
       <div className="swaniki-card" style={{
@@ -414,6 +442,15 @@ export default function ShiftRoster({ onNavigate }) {
           </table>
         </div>
       </div>
+
+      {showPrint && (
+        <RosterPrintModal
+          shifts={shifts}
+          employees={employees}
+          org={org}
+          onClose={() => setShowPrint(false)}
+        />
+      )}
     </div>
   );
 }
