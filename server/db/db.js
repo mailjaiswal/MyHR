@@ -13,16 +13,18 @@ if (!connectionString) {
 
 const useSsl = !process.env.DATABASE_NO_SSL && /supabase\.co|pooler\.supabase\.com|neon\.tech|rds\.amazonaws\.com/.test(connectionString);
 
-// Serverless sizing: Supabase's session-mode pooler (:5432) hard-caps total
-// concurrent clients (15 on the free tier). Each warm Lambda instance owns its
-// own Pool, so a per-instance `max` of 10 blows the ceiling the moment a couple
-// of instances run concurrently (EMAXCONNSESSION). Keep `max` small and release
-// idle sessions quickly so server-side slots free up between requests.
-// (For higher concurrency, point DATABASE_URL at the transaction pooler :6543.)
+// Serverless sizing: DATABASE_URL must point at Supabase's TRANSACTION-mode
+// pooler (:6543), not the session-mode one (:5432). Session mode pins a 1:1
+// backend per client and hard-caps total clients (15 on the free tier), so a few
+// warm Lambda instances (each running cold-start migrate() + an import + the UI's
+// /progress polls + per-request auth) blow the ceiling → EMAXCONNSESSION surfacing
+// as an opaque HTTP 500 from middleware. PgBouncer transaction mode multiplexes many
+// client connections onto a small backend pool, decoupling app concurrency from the
+// DB's connection limit, so a normal per-instance max is safe again.
 const pool = new Pool({
   connectionString,
   ssl: useSsl ? { rejectUnauthorized: false } : undefined,
-  max: 3,
+  max: 10,
   idleTimeoutMillis: 10000,
   connectionTimeoutMillis: 15000
 });
