@@ -3,8 +3,8 @@
 // through the same ingestion pipeline as webhook + SQL import.
 const { db } = require('../db/database');
 const biotime = require('./biotimeApi');
-const { ingestPunch } = require('./attendanceEngine');
-const { writeSyncLog, finishSyncLog } = require('./syncLogger');
+const { bulkIngestPunches } = require('./attendanceEngine');
+const { writeSyncLog, finishSyncLog, updateSyncLogProgress } = require('./syncLogger');
 const { attachDaySummary } = require('./daySummaryService');
 const { notify } = require('./notificationService');
 const { employeeCodeOrFallback } = require('./employeeCodeService');
@@ -41,8 +41,9 @@ function formatWindowEnd(date) {
 async function syncApiSource(source, manual = false) {
   const options = parseOptions(source);
   const startedAt = new Date().toISOString();
+  const startedAtMs = Date.now();
   const logId = `sync_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const counters = { recordsFound: 0, recordsImported: 0, recordsSkipped: 0, employeesCreated: 0, devicesCreated: 0, createdNames: [], errors: [], duplicatePunches: [] };
+  const counters = { recordsFound: 0, recordsImported: 0, recordsSkipped: 0, newPunches: 0, employeesCreated: 0, employeesMatched: 0, devicesCreated: 0, createdNames: [], errors: [], duplicatePunches: [] };
 
   await writeSyncLog({ id: logId, sourceId: source.id, sourceName: source.name, syncType: manual ? 'MANUAL' : 'API_PULL', startedAt, message: 'Pulling punches from vendor API' });
 
@@ -106,44 +107,64 @@ async function syncApiSource(source, manual = false) {
       }
     }
 
+    // Normalize transactions → punches first (invalid rows counted as skipped), then
+    // feed each device's batch through the set-based engine (not ~6 round-trips/punch),
+    // streaming live counts into the RUNNING sync_logs row for the progress bar.
+    const validPunches = [];
     for (const txn of transactions) {
       try {
         const norm = biotime.normalizeTransaction(txn);
-        if (!norm.biometricUserId || !norm.punchTime) {
-          counters.recordsSkipped += 1;
-          continue;
-        }
-        const deviceId = await ensureDevice(norm.deviceSerial || null, counters);
-        const emp = await ensureEmployee(norm.biometricUserId, norm.biometricUserId, counters);
-        if (!emp) {
-          counters.recordsSkipped += 1;
-          continue;
-        }
-        const result = await ingestPunch({
-          deviceId,
-          biometricUserId: norm.biometricUserId,
-          punchTime: norm.punchTime,
-          verificationMode: norm.verificationMode,
-          inOutMode: norm.inOutMode
-        });
-        if (result && (result.status === 'SUCCESS' || result.status === 'DUPLICATE_IGNORED')) {
-          counters.recordsImported += 1;
-          // Keep dedup-ignored punches so the day summary can account for overlap
-          if (result.status === 'DUPLICATE_IGNORED') {
-            counters.duplicatePunches.push({ biometricUserId: norm.biometricUserId, punchTime: norm.punchTime });
-          }
-        } else {
-          counters.recordsSkipped += 1;
-        }
+        if (!norm.biometricUserId || !norm.punchTime) { counters.recordsSkipped += 1; continue; }
+        validPunches.push(norm);
       } catch (e) {
         counters.recordsSkipped += 1;
         if (counters.errors.length < 20) counters.errors.push(`${txn.emp_code}: ${e.message}`);
       }
     }
+    const totalRows = validPunches.length;
+    await updateSyncLogProgress(logId, { recordsFound: totalRows, recordsImported: 0 });
 
-    const status = counters.errors.length ? 'PARTIAL' : 'SUCCESS';
+    const NONE = '__none__';
+    const deviceBySerial = {};
+    const groups = {};
+    for (const n of validPunches) {
+      const key = n.deviceSerial ? String(n.deviceSerial) : NONE;
+      if (!deviceBySerial[key]) deviceBySerial[key] = await ensureDevice(n.deviceSerial || null, counters);
+      const dev = deviceBySerial[key];
+      (groups[dev] = groups[dev] || []).push(n);
+    }
+
+    // API path always auto-provisions stub staff for unknown biometric ids.
+    const ensureEmp = (args) => ensureEmployee(args.biometricUserId, args.biometricUserId, counters);
+    let doneBase = 0;
+    for (const [deviceId, gp] of Object.entries(groups)) {
+      const bulk = await bulkIngestPunches({
+        deviceId,
+        punches: gp.map(n => ({
+          biometricUserId: n.biometricUserId, punchTime: n.punchTime,
+          verificationMode: n.verificationMode, inOutMode: n.inOutMode
+        })),
+        importBatch: logId,
+        sourceId: source.id,
+        ensureEmployee: ensureEmp,
+        onProgress: async (done) => { await updateSyncLogProgress(logId, { recordsImported: Math.min(doneBase + done, totalRows) }); }
+      });
+      doneBase += gp.length;
+      counters.newPunches += bulk.newPunches;
+      counters.recordsImported += bulk.newPunches + bulk.duplicatePunches;
+      counters.recordsSkipped += bulk.recordsSkipped;
+      counters.employeesMatched += bulk.employeesMatched;
+      counters.duplicatePunches.push(...bulk.duplicateList);
+      if (bulk.errors?.length) counters.errors.push(...bulk.errors);
+    }
+    await updateSyncLogProgress(logId, { recordsImported: totalRows });
+
+    const status = (counters.errors.length && counters.recordsImported === 0)
+      ? 'FAILED'
+      : counters.errors.length ? 'PARTIAL' : 'SUCCESS';
+    const durationMs = Date.now() - startedAtMs;
     const message = counters.errors.length
-      ? `Pulled ${counters.recordsImported} of ${counters.recordsFound} transactions (${counters.errors.length} errors: ${counters.errors.join('; ')})`
+      ? `Pulled ${counters.recordsImported} of ${counters.recordsFound} transactions (${counters.errors.length} errors: ${counters.errors.slice(0, 3).join('; ')})`
       : `Pulled ${counters.recordsImported} transactions from ${source.base_url}.`;
 
     await finishSyncLog(logId, status, counters, message);
@@ -167,7 +188,8 @@ async function syncApiSource(source, manual = false) {
     await db.run(`UPDATE data_sources SET last_sync_at = ?, updated_at = CURRENT_TIMESTAMP, status = 'ACTIVE' WHERE id = ?`,
       new Date().toISOString(), source.id);
 
-    return { ...counters, status, daySummary };
+    const times = validPunches.map(n => n.punchTime).sort();
+    return { ...counters, status, message, durationMs, daySummary, dateFrom: times[0] || null, dateTo: times[times.length - 1] || null };
   } catch (err) {
     await finishSyncLog(logId, 'FAILED', counters, err.message);
     await db.run(`UPDATE data_sources SET updated_at = CURRENT_TIMESTAMP, status = 'ERROR' WHERE id = ?`, source.id);

@@ -15,11 +15,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { db } = require('../db/database');
-const { ingestPunch } = require('./attendanceEngine');
-const { writeSyncLog, finishSyncLog } = require('./syncLogger');
+const { bulkIngestPunches } = require('./attendanceEngine');
+const { writeSyncLog, finishSyncLog, updateSyncLogProgress } = require('./syncLogger');
 const { attachDaySummary } = require('./daySummaryService');
 const { notify } = require('./notificationService');
-const { slugId, ensureDevice, ensureEmployee, defaultShiftId, defaultDepartmentId, knownBiometricIds } = require('./importerHelpers');
+const { slugId, ensureDevice, ensureEmployee, defaultShiftId, defaultDepartmentId, resolveDeviceId, knownBiometricIds } = require('./importerHelpers');
 
 // node:sqlite is loaded lazily so serverless runtimes (which only use PG now)
 // never need it at boot; it's only required when a vendor SQL file is imported.
@@ -357,7 +357,7 @@ async function importFile({ buffer, filePath: existingPath, sourceId, sourceName
   const opts = { createEmployees: true, createDevices: true, ...options };
   const startedAt = new Date().toISOString();
   const logId = `sync_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const counters = { recordsFound: 0, recordsImported: 0, recordsSkipped: 0, employeesCreated: 0, devicesCreated: 0, createdNames: [], createdEmployeeIds: [], createdDeviceIds: [], detectedTables: [], errors: [], duplicatePunches: [] };
+  const counters = { recordsFound: 0, recordsImported: 0, recordsSkipped: 0, newPunches: 0, employeesCreated: 0, employeesMatched: 0, devicesCreated: 0, createdNames: [], createdEmployeeIds: [], createdDeviceIds: [], detectedTables: [], errors: [], duplicatePunches: [] };
 
   await writeSyncLog({ id: logId, sourceId, sourceName, syncType, startedAt, message: 'Import started' });
 
@@ -399,64 +399,69 @@ async function importFile({ buffer, filePath: existingPath, sourceId, sourceName
     }
 
     counters.recordsFound = punches.length;
+    const totalRows = punches.length;
+    const startedAtMs = Date.now();
+    // Seed the live progress row so the polling UI has a denominator immediately.
+    await updateSyncLogProgress(logId, { recordsFound: totalRows, recordsImported: 0 });
     const empByName = {};
     (employees || []).forEach(e => { empByName[e.biometricUserId] = e; });
 
-    for (const punch of punches) {
-      try {
-        let deviceId = null;
-        if (opts.createDevices) {
-          deviceId = await ensureDevice(punch.deviceSerial, counters);
-        } else {
-          const row = punch.deviceSerial
-            ? await db.get('SELECT id FROM devices WHERE serial_number = ?', punch.deviceSerial)
-            : null;
-          deviceId = row ? row.id : null;
-        }
-        if (!deviceId) {
-          deviceId = ((await db.get('SELECT id FROM devices ORDER BY created_at ASC LIMIT 1')) || {}).id || null;
-        }
-        if (!deviceId) {
-          throw new Error('No biometric device exists; create a device first or enable auto-create devices.');
-        }
-
-        const emp = await ensureEmployee(
-          { biometricUserId: punch.biometricUserId, fullName: empByName[punch.biometricUserId]?.fullName },
-          opts.createEmployees,
-          counters
-        );
-        if (!emp) {
-          counters.recordsSkipped += 1;
-          continue;
-        }
-
-        const result = await ingestPunch({
-          deviceId,
-          biometricUserId: punch.biometricUserId,
-          punchTime: punch.punchTime,
-          verificationMode: punch.verificationMode,
-          inOutMode: punch.inOutMode,
-          importBatch: logId,
-          sourceId
-        });
-        if (result && (result.status === 'SUCCESS' || result.status === 'DUPLICATE_IGNORED')) {
-          counters.recordsImported += 1;
-          // Keep dedup-ignored punches so the day summary can account for overlap
-          if (result.status === 'DUPLICATE_IGNORED') {
-            counters.duplicatePunches.push({ biometricUserId: punch.biometricUserId, punchTime: punch.punchTime });
-          }
-        } else {
-          counters.recordsSkipped += 1;
-        }
-      } catch (e) {
-        counters.recordsSkipped += 1;
-        if (counters.errors.length < 20) counters.errors.push(`${punch.biometricUserId}: ${e.message}`);
+    // Resolve one device per distinct vendor serial (auto-create when allowed), then
+    // group punches so every row for a device flows through the set-based engine once
+    // instead of ~6 round-trips each. `resolveDeviceId` mirrors the old fallback:
+    // named serial → existing → oldest device → (create) → throw when nothing exists.
+    const NONE = '__none__';
+    const deviceBySerial = {};
+    for (const p of punches) {
+      const key = p.deviceSerial ? String(p.deviceSerial) : NONE;
+      if (!deviceBySerial[key]) {
+        deviceBySerial[key] = await resolveDeviceId(key === NONE ? null : key, { createDevices: opts.createDevices, counters });
       }
     }
+    const groups = {};
+    for (const p of punches) {
+      const dev = deviceBySerial[p.deviceSerial ? String(p.deviceSerial) : NONE];
+      (groups[dev] = groups[dev] || []).push(p);
+    }
 
-    const status = counters.errors.length > 0 ? 'PARTIAL' : 'SUCCESS';
+    // Employee resolver handed to the engine: supplies the vendor's real name when the
+    // punch table's companion employee table had it, else the importerHelpers stub.
+    const ensureEmp = (args) => ensureEmployee(
+      { biometricUserId: args.biometricUserId, fullName: empByName[args.biometricUserId]?.fullName },
+      opts.createEmployees,
+      counters
+    );
+
+    let doneBase = 0;
+    for (const [deviceId, gp] of Object.entries(groups)) {
+      const bulk = await bulkIngestPunches({
+        deviceId,
+        punches: gp.map(p => ({
+          biometricUserId: p.biometricUserId, punchTime: p.punchTime,
+          verificationMode: p.verificationMode, inOutMode: p.inOutMode
+        })),
+        importBatch: logId,
+        sourceId,
+        ensureEmployee: ensureEmp,
+        onProgress: async (done) => { await updateSyncLogProgress(logId, { recordsImported: Math.min(doneBase + done, totalRows) }); }
+      });
+      doneBase += gp.length;
+      counters.newPunches += bulk.newPunches;
+      counters.recordsImported += bulk.newPunches + bulk.duplicatePunches;
+      counters.recordsSkipped += bulk.recordsSkipped;
+      counters.employeesMatched += bulk.employeesMatched;
+      counters.duplicatePunches.push(...bulk.duplicateList);
+      if (bulk.errors?.length) counters.errors.push(...bulk.errors);
+    }
+    // Ensure the bar tops out even if in-file dedup kept counts a hair under raw.
+    await updateSyncLogProgress(logId, { recordsImported: totalRows });
+
+    const status = (counters.errors.length && counters.recordsImported === 0)
+      ? 'FAILED'
+      : counters.errors.length ? 'PARTIAL' : 'SUCCESS';
+    const durationMs = Date.now() - startedAtMs;
     const message = counters.errors.length
-      ? `Imported ${counters.recordsImported} of ${counters.recordsFound} punches (${counters.errors.length} errors: ${counters.errors.join('; ')})`
+      ? `Imported ${counters.recordsImported} of ${counters.recordsFound} punches (${counters.errors.length} errors: ${counters.errors.slice(0, 3).join('; ')})`
       : `Imported ${counters.recordsImported} punches from ${detectRes.punch.table}.`;
 
     await finishSyncLog(logId, status, counters, message);
@@ -481,7 +486,8 @@ async function importFile({ buffer, filePath: existingPath, sourceId, sourceName
       await db.run(`UPDATE data_sources SET last_sync_at = ?, updated_at = CURRENT_TIMESTAMP, status = 'ACTIVE' WHERE id = ?`, new Date().toISOString(), sourceId);
     }
 
-    return { ...counters, status, daySummary };
+    const times = punches.map(p => p.punchTime).sort();
+    return { ...counters, status, message, durationMs, daySummary, dateFrom: times[0] || null, dateTo: times[times.length - 1] || null };
   } catch (err) {
     await finishSyncLog(logId, 'FAILED', counters, err.message);
     if (sourceId) {

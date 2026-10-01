@@ -273,7 +273,7 @@ router.get('/progress', async (req, res) => {
     const row = await db.get(`
       SELECT id, records_found, records_imported
       FROM sync_logs
-      WHERE status = 'RUNNING' AND sync_type = 'FILE_IMPORT'
+      WHERE status = 'RUNNING' AND sync_type IN ('FILE_IMPORT', 'FILE_PULL', 'API_PULL', 'MANUAL')
       ORDER BY started_at DESC LIMIT 1
     `);
     return res.json({

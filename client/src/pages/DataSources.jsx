@@ -164,6 +164,8 @@ export default function DataSources({ onNavigate }) {
   const [elapsedMs, setElapsedMs] = useState(0);
   // Live ingest counts streamed from the server while the import runs: { found, imported }
   const [progress, setProgress] = useState(null);
+  // Guided run for the manual Sync buttons (API / auto-fetched SQL file) — same modal as upload.
+  const [syncRun, setSyncRun] = useState(null);
 
   // Maintenance: attendance recompute + per-import revert
   const canEdit = hasPerm('SETTINGS_EDIT');
@@ -298,22 +300,48 @@ export default function DataSources({ onNavigate }) {
     finally { setBusy(null); }
   };
 
+  // Manual sync (API source or auto-fetched SQL file) reuses the guided upload modal so
+  // the operator sees the identical live progress bar → completion report → Close flow.
   const handleSync = async (src) => {
-    setBusy(`SYNC_${src.id}`);
+    if (syncRun?.stage === 'processing') return;
+    const preview = { fileName: src.name, totalRows: 0, distinctUsers: 0, format: 'SYNC' };
+    setSyncRun({ src, preview, stage: 'processing', outcome: null, runError: null, elapsedMs: 0, progress: { found: 0, imported: 0 } });
+    const t0 = Date.now();
+    const tick = setInterval(() => setSyncRun(r => r ? { ...r, elapsedMs: Date.now() - t0 } : r), 100);
+    let busy = false;
+    const poll = setInterval(async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const r = await fetch('/api/v1/ingestion/progress');
+        const d = await r.json();
+        if (d.success && d.progress) setSyncRun(r2 => r2 ? { ...r2, progress: { found: d.progress.recordsFound, imported: d.progress.recordsImported } } : r2);
+      } catch { /* transient poll error; final result comes from the sync response */ }
+      finally { busy = false; }
+    }, 350);
     try {
       const res = await fetch(`/api/v1/ingestion/sources/${src.id}/sync`, { method: 'POST' });
+      const ct = res.headers.get('content-type') || '';
+      if (!res.ok || !ct.includes('application/json')) {
+        const hint = res.status >= 500 ? ' The sync may have timed out on the server — try a narrower backfill window.' : '';
+        throw new Error(`Sync failed (HTTP ${res.status}).${hint}`);
+      }
       const data = await res.json();
       if (data.success) {
-        const t = data.daySummary?.totals;
-        notify(t?.daysTouched
-          ? `Sync complete — ${data.recordsImported} of ${data.recordsFound} records imported · ${t.daysTouched} day(s) handled`
-          : `Sync complete — ${data.recordsImported} of ${data.recordsFound} records imported`);
+        setSyncRun(r => ({ ...r, stage: 'done', outcome: { import: data, durationMs: data.durationMs ?? (Date.now() - t0) }, progress: { found: data.recordsFound || 0, imported: data.recordsImported || 0 } }));
+        loadAll();
+      } else {
+        setSyncRun(r => ({ ...r, stage: 'error', runError: data.error || 'Sync failed' }));
       }
-      else notify(data.error || 'Sync failed', true);
-      loadAll();
-    } catch (err) { notify(err.message, true); }
-    finally { setBusy(null); }
+    } catch (err) {
+      setSyncRun(r => ({ ...(r || { preview, outcome: null, elapsedMs: Date.now() - t0 }), stage: 'error', runError: err.message || 'Sync failed' }));
+    } finally {
+      clearInterval(tick);
+      clearInterval(poll);
+    }
   };
+
+  const closeSyncRun = () => setSyncRun(null);
 
   const uploadHeaders = () => ({
     'Content-Type': 'application/octet-stream',
@@ -1259,6 +1287,26 @@ export default function DataSources({ onNavigate }) {
         />
       )}
 
+      {/* Manual sync reuses the same guided modal — skip the preview stage, go straight to progress */}
+      {syncRun && (
+        <FilePreviewModal
+          preview={syncRun.preview}
+          uploading={syncRun.stage === 'processing'}
+          stage={syncRun.stage}
+          outcome={syncRun.outcome}
+          runError={syncRun.runError}
+          elapsedMs={syncRun.elapsedMs}
+          progress={syncRun.progress}
+          processingTitle="Syncing your data source…"
+          processingNote={<>Pulling the latest punches from <strong>{syncRun.preview.fileName}</strong> and rebuilding attendance. Please keep this window open.</>}
+          doneTitle="Sync complete"
+          errorTitle="Sync failed"
+          onNavigate={onNavigate}
+          onClose={closeSyncRun}
+          onConfirm={syncRun.src ? () => handleSync(syncRun.src) : undefined}
+        />
+      )}
+
       {rosterGate && (
         <div className="modal-overlay" onClick={() => { setRosterGate(null); setRosterName(''); }}>
           <div className="modal-card" style={{ width: '100%', maxWidth: '30rem', padding: 0 }} onClick={e => e.stopPropagation()}>
@@ -1447,7 +1495,7 @@ function formatDuration(ms) {
 // Guided import modal: preview (review + confirm) → processing (live progress) →
 // done (ingestion summary + Close) | error (reason + retry/Close). All feedback
 // lives inside this overlay so nothing is silently shown behind a closed modal.
-function FilePreviewModal({ preview, uploading, stage = 'preview', outcome, runError, elapsedMs = 0, progress = null, onNavigate, onClose, onConfirm }) {
+function FilePreviewModal({ preview, uploading, stage = 'preview', outcome, runError, elapsedMs = 0, progress = null, processingTitle = 'Importing your file…', processingNote = null, doneTitle = 'Ingestion complete', errorTitle = 'Import failed', onNavigate, onClose, onConfirm }) {
   const [sheet, setSheet] = useState('punches');
   const hasEmployees = Array.isArray(preview.employees) && preview.employees.length > 0;
   useEscapeClose(!uploading, onClose);
@@ -1486,7 +1534,7 @@ function FilePreviewModal({ preview, uploading, stage = 'preview', outcome, runE
             return (
               <div style={{ padding: '2.25rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.15rem', textAlign: 'center' }}>
                 <Loader2 size={38} className="spin" style={{ color: 'var(--brand-primary-ink)' }} />
-                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-heading)' }}>Importing your file…</h2>
+                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-heading)' }}>{processingTitle}</h2>
                 {/* Big live count */}
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '0.4rem' }}>
                   <span style={{ fontFamily: 'var(--font-heading)', fontSize: '2.6rem', fontWeight: 800, color: 'var(--brand-primary-ink)', lineHeight: 1, letterSpacing: '-0.03em' }}>
@@ -1508,8 +1556,8 @@ function FilePreviewModal({ preview, uploading, stage = 'preview', outcome, runE
                   </div>
                 </div>
                 <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: '30rem' }}>
-                  Writing <strong>{(preview.totalRows || 0).toLocaleString('en-IN')}</strong> punch rows and rebuilding attendance for
-                  {' '}{(preview.distinctUsers || 0).toLocaleString('en-IN')} staff. Please keep this window open.
+                  {processingNote || <>Writing <strong>{(preview.totalRows || 0).toLocaleString('en-IN')}</strong> punch rows and rebuilding attendance for
+                    {' '}{(preview.distinctUsers || 0).toLocaleString('en-IN')} staff. Please keep this window open.</>}
                 </p>
               </div>
             );
@@ -1520,7 +1568,7 @@ function FilePreviewModal({ preview, uploading, stage = 'preview', outcome, runE
             <>
               <div style={{ padding: '1.6rem 1.75rem 0.9rem', textAlign: 'center', background: 'rgba(16,185,129,0.07)', borderBottom: '1px solid var(--border-color)' }}>
                 <CheckCircle2 size={38} style={{ color: 'var(--brand-primary-ink)' }} />
-                <h2 style={{ margin: '0.5rem 0 0.15rem', fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-heading)' }}>Ingestion complete</h2>
+                <h2 style={{ margin: '0.5rem 0 0.15rem', fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-heading)' }}>{doneTitle}</h2>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                   {preview.fileName} · finished in <strong style={{ color: statusColor }}>{formatDuration(durMs)}</strong>
                 </div>
@@ -1556,7 +1604,7 @@ function FilePreviewModal({ preview, uploading, stage = 'preview', outcome, runE
             <>
               <div style={{ padding: '1.8rem 1.75rem 1rem', textAlign: 'center', background: 'rgba(185,28,28,0.08)', borderBottom: '1px solid var(--border-color)' }}>
                 <XCircle size={38} style={{ color: 'var(--danger-ink)' }} />
-                <h2 style={{ margin: '0.5rem 0 0.15rem', fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-heading)' }}>Import failed</h2>
+                <h2 style={{ margin: '0.5rem 0 0.15rem', fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-heading)' }}>{errorTitle}</h2>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{preview.fileName}</div>
               </div>
               <div style={{ padding: '1.2rem 1.75rem', fontSize: '0.85rem', color: 'var(--danger-ink)', lineHeight: 1.6 }}>
