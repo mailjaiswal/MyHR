@@ -211,14 +211,14 @@ async function importAttlog({ buffer, fileName, deviceSerial, sourceId, sourceNa
       });
     }
 
-    // Overtime classification emails for the days this run turned OVERTIME (dedup:
-    // once per employee/day) — parity with the incremental ingestPunch behaviour.
-    for (const ot of (bulk.overtimeDays || [])) {
-      await notify('overtime.logged', {
-        employeeId: ot.employeeId, dutyDate: ot.dutyDate, totalHours: ot.totalHours,
-        otHours: ot.otHours, status: 'OVERTIME', dedupeKey: `ot|${ot.dutyDate}|${ot.employeeId}`
-      }).catch(() => {});
-    }
+    // NOTE: We intentionally do NOT fan out one `overtime.logged` email per overtime
+    // day here. A bulk ATTLOG backfill can span hundreds of OT-days at once; awaiting
+    // a notify() for each (4 DB reads + insert + a synchronous SMTP flush per call)
+    // blows the Vercel serverless request window (HTTP 504) and would spam staff with
+    // hundreds of individual emails for a single historical import. The overtime hours
+    // are still fully recorded in attendance_records by the rebuild, and the admin sees
+    // the totals on the completion screen. Live, low-volume device pushes keep their
+    // per-punch OT alerts via the separate ingestPunch path.
 
     if (sourceId) {
       await db.run(`UPDATE data_sources SET last_sync_at = ?, updated_at = CURRENT_TIMESTAMP, status = 'ACTIVE' WHERE id = ?`, new Date().toISOString(), sourceId);
