@@ -318,7 +318,7 @@ export default function DataSources({ onNavigate }) {
         if (d.success && d.progress) setSyncRun(r2 => r2 ? { ...r2, progress: { found: d.progress.recordsFound, imported: d.progress.recordsImported } } : r2);
       } catch { /* transient poll error; final result comes from the sync response */ }
       finally { busy = false; }
-    }, 350);
+    }, 1200);
     try {
       const res = await fetch(`/api/v1/ingestion/sources/${src.id}/sync`, { method: 'POST' });
       const ct = res.headers.get('content-type') || '';
@@ -401,7 +401,7 @@ export default function DataSources({ onNavigate }) {
         if (d.success && d.progress) setProgress({ found: d.progress.recordsFound, imported: d.progress.recordsImported });
       } catch { /* transient poll errors are fine; final result comes from /upload */ }
       finally { pollBusy = false; }
-    }, 350);
+    }, 1200);
     try {
       const buf = await file.arrayBuffer();
       const res = await fetch('/api/v1/ingestion/upload', { method: 'POST', headers: uploadHeaders(), body: buf });

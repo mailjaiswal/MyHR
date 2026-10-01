@@ -13,12 +13,18 @@ if (!connectionString) {
 
 const useSsl = !process.env.DATABASE_NO_SSL && /supabase\.co|pooler\.supabase\.com|neon\.tech|rds\.amazonaws\.com/.test(connectionString);
 
+// Serverless sizing: Supabase's session-mode pooler (:5432) hard-caps total
+// concurrent clients (15 on the free tier). Each warm Lambda instance owns its
+// own Pool, so a per-instance `max` of 10 blows the ceiling the moment a couple
+// of instances run concurrently (EMAXCONNSESSION). Keep `max` small and release
+// idle sessions quickly so server-side slots free up between requests.
+// (For higher concurrency, point DATABASE_URL at the transaction pooler :6543.)
 const pool = new Pool({
   connectionString,
   ssl: useSsl ? { rejectUnauthorized: false } : undefined,
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000
+  max: 3,
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 15000
 });
 
 // Normalize numeric/text types that node-postgres returns as strings.
