@@ -97,7 +97,9 @@ async function ingestPunch({ deviceId, biometricUserId, punchTime, verificationM
     return {
       status: 'DUPLICATE_IGNORED',
       message: 'Biometric punch tap already recorded within the same minute window',
-      punchId: existingPunch.id
+      punchId: existingPunch.id,
+      biometricUserId,
+      punchTime: punchIso
     };
   }
 
@@ -307,10 +309,227 @@ async function recomputeAttendance({ from = null, to = null, employeeIds = null 
   return result;
 }
 
+/**
+ * Pure day-metrics computation shared by the incremental recompute and the
+ * set-based bulk rebuild. Given every punch instant that belongs to one
+ * (employee, duty date), derive first-in / last-out / hours / late / OT / early
+ * and the attendance status, exactly as recomputeAttendance does.
+ */
+function computeDayMetrics(shift, dutyDate, dateObjs) {
+  const HALF = config.ATTENDANCE_RULES.HALF_DAY_MIN_HOURS;
+  const FULL = config.ATTENDANCE_RULES.FULL_DAY_MIN_HOURS;
+  let firstIn = dateObjs[0], lastOut = dateObjs[0];
+  for (const d of dateObjs) { if (d < firstIn) firstIn = d; if (d > lastOut) lastOut = d; }
+  const totalHours = Math.round(((lastOut - firstIn) / 3600000) * 10) / 10;
+  const [sh, sm] = shift.start_time.split(':').map(Number);
+  const expected = new Date(`${dutyDate}T${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}:00`);
+  const lateMinutes = firstIn > expected ? Math.max(0, Math.floor((firstIn - expected) / 60000)) : 0;
+  const overtimeHours = totalHours > shift.duration_hours ? Math.round((totalHours - shift.duration_hours) * 10) / 10 : 0;
+  const earlyMinutes = computeEarlyMinutes(dutyDate, lastOut.toISOString(), shift, { totalHours }) || 0;
+  let status = 'PRESENT';
+  if (totalHours < HALF) status = 'ABSENT';
+  else if (totalHours < FULL) status = 'HALF_DAY';
+  else if (overtimeHours > 0) status = 'OVERTIME';
+  return {
+    firstIn: firstIn.toISOString(), lastOut: lastOut.toISOString(),
+    totalHours, lateMinutes, earlyMinutes, overtimeHours, status
+  };
+}
+
+const IN_CHUNK = 500;   // rows per multi-value statement (bounds $n params well under PG's 65k cap)
+const chunk = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
+
+/**
+ * rebuildAttendanceForEmployees — set-based rebuild for a KNOWN set of employees.
+ * Loads all their punches + shifts + existing records in a handful of queries,
+ * derives each duty date in memory, then bulk-upserts. Manually REGULARIZED days
+ * are never overwritten (guarded in the ON CONFLICT ... WHERE clause). This is the
+ * fast counterpart to recomputeAttendance for the bulk import hot path.
+ */
+async function rebuildAttendanceForEmployees(employees) {
+  const result = { employees: 0, daysUpserted: 0, overtimeDays: [] };
+  const valid = employees.filter(e => e && e.shift_id && e.biometric_user_id);
+  if (!valid.length) return result;
+
+  const bios = [...new Set(valid.map(e => String(e.biometric_user_id)))];
+  const empIds = [...new Set(valid.map(e => e.id))];
+
+  // All punches for these staff (batched).
+  const punchByBio = new Map();
+  for (const slice of chunk(bios, IN_CHUNK)) {
+    const ph = slice.map(() => '?').join(',');
+    const rows = await db.all(`SELECT biometric_user_id, punch_time FROM biometric_punches WHERE biometric_user_id IN (${ph})`, ...slice);
+    for (const r of rows) {
+      const b = String(r.biometric_user_id);
+      if (!punchByBio.has(b)) punchByBio.set(b, []);
+      punchByBio.get(b).push(r.punch_time);
+    }
+  }
+
+  // Shifts (batched).
+  const shiftIds = [...new Set(valid.map(e => e.shift_id))];
+  const shiftMap = new Map();
+  for (const slice of chunk(shiftIds, IN_CHUNK)) {
+    const ph = slice.map(() => '?').join(',');
+    const rows = await db.all(`SELECT * FROM shifts WHERE id IN (${ph})`, ...slice);
+    for (const s of rows) shiftMap.set(s.id, s);
+  }
+
+  // Derived rows in memory.
+  const now = Date.now();
+  const rowsToWrite = [];
+  for (const emp of valid) {
+    const shift = shiftMap.get(emp.shift_id);
+    if (!shift) continue;
+    const list = punchByBio.get(String(emp.biometric_user_id)) || [];
+    const groups = {};
+    for (const iso of list) {
+      const d = new Date(iso);
+      const dd = resolveDutyDate(emp, shift, d);
+      (groups[dd] = groups[dd] || []).push(d);
+    }
+    for (const [dutyDate, dates] of Object.entries(groups)) {
+      const m = computeDayMetrics(shift, dutyDate, dates);
+      rowsToWrite.push({ dutyDate, employeeId: emp.id, shiftId: shift.id, ...m });
+      if (m.status === 'OVERTIME' && m.overtimeHours > 0) {
+        result.overtimeDays.push({ employeeId: emp.id, dutyDate, totalHours: m.totalHours, otHours: m.overtimeHours });
+      }
+    }
+    result.employees += 1;
+  }
+
+  // Bulk upsert, protecting REGULARIZED days.
+  let seq = 0;
+  for (const slice of chunk(rowsToWrite, IN_CHUNK)) {
+    const tuples = slice.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const params = [];
+    for (const r of slice) {
+      params.push(`att_${now}_${seq++}`, r.dutyDate, r.employeeId, r.shiftId, r.firstIn, r.lastOut,
+        r.totalHours, r.lateMinutes, r.earlyMinutes, r.overtimeHours, r.status);
+    }
+    const res = await db.run(`
+      INSERT INTO attendance_records (id, duty_date, employee_id, shift_id, first_in_time, last_out_time, total_hours, late_minutes, undertime_minutes, overtime_hours, status)
+      VALUES ${tuples.join(',')}
+      ON CONFLICT (duty_date, employee_id) DO UPDATE SET
+        shift_id = EXCLUDED.shift_id, first_in_time = EXCLUDED.first_in_time, last_out_time = EXCLUDED.last_out_time,
+        total_hours = EXCLUDED.total_hours, late_minutes = EXCLUDED.late_minutes, undertime_minutes = EXCLUDED.undertime_minutes,
+        overtime_hours = EXCLUDED.overtime_hours, status = EXCLUDED.status, updated_at = CURRENT_TIMESTAMP
+      WHERE attendance_records.status <> 'REGULARIZED'
+    `, ...params);
+    result.daysUpserted += (res.changes || 0);
+  }
+  void empIds;
+  return result;
+}
+
+/**
+ * bulkIngestPunches — set-based ingestion of a whole file/pull in a handful of
+ * round-trips instead of ~6 per punch. Dedups within the batch and against
+ * stored punches by punch_hash, auto-provisions missing employees via the
+ * supplied resolver, bulk-inserts new raw punches, then rebuilds derived
+ * attendance for only the touched staff. Returns counts + the dedup-ignored list
+ * so the caller can build the day-handling summary.
+ */
+async function bulkIngestPunches({ deviceId, punches = [], importBatch = null, sourceId = null, ensureEmployee = null }) {
+  const out = {
+    newPunches: 0, duplicatePunches: 0, recordsSkipped: 0,
+    duplicateList: [], employeesMatched: 0, employeesCreated: 0,
+    errors: [], affectedEmployees: []
+  };
+  if (!punches.length) return out;
+
+  // 1. In-batch dedup by hash (same device + user + minute) — keep first.
+  const byHash = new Map();
+  for (const p of punches) {
+    const iso = new Date(p.punchTime).toISOString();
+    const hash = generatePunchHash(deviceId, p.biometricUserId, iso);
+    if (!byHash.has(hash)) byHash.set(hash, { ...p, punchTime: iso, hash });
+  }
+  const candidates = [...byHash.values()];
+
+  // 2. Resolve employees for distinct biometric ids (batched) + auto-create missing.
+  const bios = [...new Set(candidates.map(c => String(c.biometricUserId)))];
+  const empByBio = new Map();
+  for (const slice of chunk(bios, IN_CHUNK)) {
+    const ph = slice.map(() => '?').join(',');
+    const rows = await db.all(`SELECT * FROM employees WHERE biometric_user_id IN (${ph})`, ...slice);
+    for (const e of rows) empByBio.set(String(e.biometric_user_id), e);
+  }
+  out.employeesMatched = empByBio.size;
+  if (ensureEmployee) {
+    for (const bio of bios) {
+      if (empByBio.has(bio)) continue;
+      try {
+        const emp = await ensureEmployee({ biometricUserId: bio });
+        if (emp) { empByBio.set(bio, emp); out.employeesCreated += 1; }
+      } catch (e) { if (out.errors.length < 20) out.errors.push(`${bio}: ${e.message}`); }
+    }
+  }
+
+  // 3. Which candidate hashes already exist in the DB? (batched)
+  const existingHash = new Set();
+  const hashes = candidates.map(c => c.hash);
+  for (const slice of chunk(hashes, IN_CHUNK)) {
+    const ph = slice.map(() => '?').join(',');
+    const rows = await db.all(`SELECT punch_hash FROM biometric_punches WHERE punch_hash IN (${ph})`, ...slice);
+    for (const r of rows) existingHash.add(r.punch_hash);
+  }
+
+  // 4. Partition into duplicates vs new (new requires a resolvable employee + shift).
+  const newRows = [];
+  const touchedBios = new Set();
+  for (const c of candidates) {
+    if (existingHash.has(c.hash)) {
+      out.duplicatePunches += 1;
+      out.duplicateList.push({ biometricUserId: c.biometricUserId, punchTime: c.punchTime });
+      continue;
+    }
+    const emp = empByBio.get(String(c.biometricUserId));
+    if (!emp || !emp.shift_id) { out.recordsSkipped += 1; continue; }
+    newRows.push(c);
+    touchedBios.add(String(c.biometricUserId));
+  }
+
+  // 5. Bulk insert new raw punches (ON CONFLICT guards any race with the read above).
+  const now = Date.now();
+  let seq = 0;
+  for (const slice of chunk(newRows, IN_CHUNK)) {
+    const tuples = slice.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const params = [];
+    for (const c of slice) {
+      params.push(`punch_${now}_${seq++}`, c.hash, deviceId, String(c.biometricUserId), c.punchTime,
+        c.verificationMode || 'FINGERPRINT', c.inOutMode || 'AUTO', importBatch, sourceId);
+    }
+    const res = await db.run(`
+      INSERT INTO biometric_punches (id, punch_hash, device_id, biometric_user_id, punch_time, verification_mode, in_out_mode, import_batch, source_id)
+      VALUES ${tuples.join(',')}
+      ON CONFLICT (punch_hash) DO NOTHING
+    `, ...params);
+    out.newPunches += (res.changes || 0);
+  }
+
+  // 6. Device heartbeat.
+  await db.run(`UPDATE devices SET last_heartbeat = ?, status = 'ONLINE' WHERE id = ?`, new Date().toISOString(), deviceId);
+
+  // 7. Rebuild derived attendance only for staff whose punches actually changed.
+  out.affectedEmployees = bios.filter(b => touchedBios.has(b)).map(b => empByBio.get(b)).filter(Boolean);
+  out.overtimeDays = [];
+  if (out.affectedEmployees.length) {
+    const rebuild = await rebuildAttendanceForEmployees(out.affectedEmployees);
+    out.overtimeDays = rebuild.overtimeDays || [];
+    out.daysUpserted = rebuild.daysUpserted;
+  }
+
+  return out;
+}
+
 module.exports = {
   ingestPunch,
   resolveDutyDate,
   generatePunchHash,
   recomputeAttendance,
-  computeEarlyMinutes
+  computeEarlyMinutes,
+  computeDayMetrics,
+  rebuildAttendanceForEmployees,
+  bulkIngestPunches
 };

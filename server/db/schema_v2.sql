@@ -470,6 +470,11 @@ ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS created_employee_ids TEXT DEFAULT
 ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS created_device_ids TEXT DEFAULT '[]';
 ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS reverted_at TIMESTAMPTZ;
 
+-- Per-run day-handling summary: how each affected duty date was treated by the
+-- ingestion (new day / extended by later punches / duplicate overlap / protected
+-- REGULARIZED / still open), so admins can see overlaps were merged, not clobbered.
+ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS day_summary TEXT;
+
 -- ============================================================
 -- V3: Employee ID format config + early-leave (undertime) store
 -- ============================================================

@@ -1077,7 +1077,7 @@ export default function Settings({ initialTab, onNavigate }) {
 
       {/* ── Tab: Data Ingestion ── */}
       {tab === 'ingestion' && hasPerm('SETTINGS_VIEW') && (
-        <DataSources />
+        <DataSources onNavigate={onNavigate} />
       )}
 
       {/* ── Tab: Backup & Recovery ── */}

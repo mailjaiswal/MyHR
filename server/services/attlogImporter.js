@@ -18,8 +18,9 @@
 // pushes, and the UI renders them back in IST.
 
 const { db } = require('../db/database');
-const { ingestPunch } = require('./attendanceEngine');
+const { bulkIngestPunches } = require('./attendanceEngine');
 const { writeSyncLog, finishSyncLog } = require('./syncLogger');
+const { attachDaySummary } = require('./daySummaryService');
 const { resolveDeviceId, ensureEmployee, knownBiometricIds } = require('./importerHelpers');
 const { notify } = require('./notificationService');
 
@@ -148,9 +149,10 @@ async function previewAttlog(buffer, fileName, { limit = 2000 } = {}) {
  */
 async function importAttlog({ buffer, fileName, deviceSerial, sourceId, sourceName, syncType = 'FILE_IMPORT', options = {} }) {
   const opts = { createEmployees: true, createDevices: true, ...options };
+  const startedAtMs = Date.now();
   const startedAt = new Date().toISOString();
   const logId = `sync_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const counters = { recordsFound: 0, recordsImported: 0, recordsSkipped: 0, employeesCreated: 0, employeesMatched: 0, devicesCreated: 0, createdNames: [], createdEmployeeIds: [], createdDeviceIds: [], errors: [] };
+  const counters = { recordsFound: 0, recordsImported: 0, recordsSkipped: 0, newPunches: 0, employeesCreated: 0, employeesMatched: 0, devicesCreated: 0, createdNames: [], createdEmployeeIds: [], createdDeviceIds: [], errors: [], duplicatePunches: [] };
 
   await writeSyncLog({ id: logId, sourceId, sourceName: sourceName || fileName || 'ATTLOG Import', syncType, startedAt, message: 'ATTLOG import started' });
 
@@ -162,49 +164,43 @@ async function importAttlog({ buffer, fileName, deviceSerial, sourceId, sourceNa
     // Pre-resolve the device once (all punches in one ATTLOG file come from one terminal)
     const deviceId = await resolveDeviceId(serial, { createDevices: opts.createDevices, counters });
 
-    // Punched chronologically; count employees that already existed
-    const seenUsers = new Set();
-    for (const punch of parsed.punches) {
-      if (!seenUsers.has(punch.biometricUserId)) {
-        seenUsers.add(punch.biometricUserId);
-        const known = await db.get('SELECT id FROM employees WHERE biometric_user_id = ?', punch.biometricUserId);
-        if (known) counters.employeesMatched += 1;
-      }
-    }
+    // Set-based ingest: the whole file in a handful of round-trips (not ~6/punch).
+    const bulk = await bulkIngestPunches({
+      deviceId,
+      punches: parsed.punches.map(p => ({
+        biometricUserId: p.biometricUserId, punchTime: p.punchTime,
+        verificationMode: p.verificationMode, inOutMode: p.inOutMode
+      })),
+      importBatch: logId,
+      sourceId,
+      ensureEmployee: opts.createEmployees
+        ? (args) => ensureEmployee(args, true, counters)
+        : null
+    });
 
-    for (const punch of parsed.punches) {
-      try {
-        const emp = await ensureEmployee({ biometricUserId: punch.biometricUserId }, opts.createEmployees, counters);
-        if (!emp) {
-          counters.recordsSkipped += 1;
-          continue;
-        }
-        const result = await ingestPunch({
-          deviceId,
-          biometricUserId: punch.biometricUserId,
-          punchTime: punch.punchTime,
-          verificationMode: punch.verificationMode,
-          inOutMode: punch.inOutMode,
-          importBatch: logId,
-          sourceId
-        });
-        if (result && (result.status === 'SUCCESS' || result.status === 'DUPLICATE_IGNORED')) {
-          counters.recordsImported += 1;
-        } else {
-          counters.recordsSkipped += 1;
-        }
-      } catch (e) {
-        counters.recordsSkipped += 1;
-        if (counters.errors.length < 20) counters.errors.push(`${punch.biometricUserId}@${punch.localTime}: ${e.message}`);
-      }
-    }
+    counters.newPunches = bulk.newPunches;
+    counters.duplicatePunches = bulk.duplicateList;
+    counters.employeesMatched = bulk.employeesMatched;
+    counters.employeesCreated = bulk.employeesCreated;
+    counters.recordsImported = bulk.newPunches + bulk.duplicatePunches;
+    counters.recordsSkipped = bulk.recordsSkipped;
+    counters.errors = bulk.errors || [];
 
-    const status = counters.errors.length > 0 ? 'PARTIAL' : 'SUCCESS';
+    const durationMs = Date.now() - startedAtMs;
+    const status = (counters.errors.length && counters.recordsImported === 0)
+      ? 'FAILED'
+      : (counters.errors.length ? 'PARTIAL' : 'SUCCESS');
     const message = counters.errors.length
       ? `Imported ${counters.recordsImported} of ${counters.recordsFound} ATTLOG punches (${counters.errors.length} errors: ${counters.errors.slice(0, 3).join('; ')})`
       : `Imported ${counters.recordsImported} ATTLOG punches${serial ? ` from device ${serial}` : ''} (${String(parsed.from).slice(0, 10)} → ${String(parsed.to).slice(0, 10)}).`;
 
     await finishSyncLog(logId, status, counters, message);
+
+    // How were the affected duty dates treated? (merge vs new vs protected…)
+    const daySummary = await attachDaySummary(logId, {
+      duplicatePunches: counters.duplicatePunches,
+      startedAtIso: startedAt
+    });
 
     if (counters.employeesCreated > 0) {
       await notify('employee.created', {
@@ -215,11 +211,20 @@ async function importAttlog({ buffer, fileName, deviceSerial, sourceId, sourceNa
       });
     }
 
+    // Overtime classification emails for the days this run turned OVERTIME (dedup:
+    // once per employee/day) — parity with the incremental ingestPunch behaviour.
+    for (const ot of (bulk.overtimeDays || [])) {
+      await notify('overtime.logged', {
+        employeeId: ot.employeeId, dutyDate: ot.dutyDate, totalHours: ot.totalHours,
+        otHours: ot.otHours, status: 'OVERTIME', dedupeKey: `ot|${ot.dutyDate}|${ot.employeeId}`
+      }).catch(() => {});
+    }
+
     if (sourceId) {
       await db.run(`UPDATE data_sources SET last_sync_at = ?, updated_at = CURRENT_TIMESTAMP, status = 'ACTIVE' WHERE id = ?`, new Date().toISOString(), sourceId);
     }
 
-    return { ...counters, status, message, deviceSerial: serial, dateFrom: parsed.from, dateTo: parsed.to };
+    return { ...counters, status, message, durationMs, daySummary, deviceSerial: serial, dateFrom: parsed.from, dateTo: parsed.to };
   } catch (err) {
     await finishSyncLog(logId, 'FAILED', counters, err.message);
     if (sourceId) {

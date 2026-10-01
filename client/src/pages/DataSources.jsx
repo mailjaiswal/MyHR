@@ -5,7 +5,7 @@ import useEscapeClose from '../hooks/useEscapeClose';
 import {
   Database, PlugZap, UploadCloud, RefreshCw, Trash2, Pencil, CheckCircle2,
   XCircle, Loader2, Server, FileText, Clock3, Settings2, Wifi, HardDrive, Link2,
-  Eye, X, Users, Table2, Calculator, Undo2, IdCard, TriangleAlert, Download
+  Eye, X, Users, Table2, Calculator, Undo2, IdCard, TriangleAlert, Download, CalendarRange, ChevronRight
 } from 'lucide-react';
 
 // Status semantics only: emerald = healthy, amber = partial, rose = failed,
@@ -36,17 +36,96 @@ function StatusBadge({ status }) {
   );
 }
 
+// Day-handling summary: how each duty date touched by an import/sync run was
+// treated (merged delta, newly built, duplicate overlap, protected, still open).
+// Renders nothing for legacy runs without a stored summary.
+const DAY_FLAG_META = {
+  open: { label: 'open — awaiting OUT', color: 'var(--warning-ink)' },
+  protected: { label: 'regularized — untouched', color: 'var(--text-muted)' }
+};
+
+function DayHandlingSummary({ summary, compact = false, onNavigate }) {
+  const [showAll, setShowAll] = useState(false);
+  if (!summary || !summary.totals) return null;
+  const t = summary.totals;
+  if (!t.daysTouched && !t.duplicatePunches) return null;
+  const fmtDay = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  const fmtTime = (iso) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '—';
+  const days = compact && !showAll ? summary.days.slice(0, 5) : summary.days;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, color: 'var(--text-heading)' }}>
+        <CalendarRange size={14} /> Days handled <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>({t.daysTouched} date{t.daysTouched === 1 ? '' : 's'} · {t.staffDayRecords || 0} staff-day{t.staffDayRecords === 1 ? '' : 's'})</span>
+      </div>
+      <div style={{ lineHeight: 1.55 }}>
+        <strong>{t.mergedDays}</strong> had new punches merged in (delta added) •
+        <strong>{t.duplicateOnlyDays}</strong> unchanged (pure duplicate overlap — nothing overwritten)
+        {t.protectedDays > 0 && <> • <strong>{t.protectedDays}</strong> regularized left protected</>}
+        {t.openDays > 0 && <> • <strong style={{ color: 'var(--warning-ink)' }}>{t.openDays}</strong> still open (awaiting OUT — completes on next batch)</>}
+      </div>
+      <div style={{ color: 'var(--text-muted)' }}>
+        {t.newPunches} new punch(es) inserted • {t.duplicatePunches} already-known punch(es) deduplicated
+      </div>
+      {days.length > 0 && (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem' }}>
+          <thead>
+            <tr style={{ textAlign: 'left', color: 'var(--text-caption)' }}>
+              <th style={{ padding: '0.25rem 0.5rem 0.25rem 0', fontWeight: 600 }}>Date</th>
+              <th style={{ padding: '0.25rem 0.5rem', fontWeight: 600 }}>Staff</th>
+              <th style={{ padding: '0.25rem 0.5rem', fontWeight: 600 }}>Window (IST)</th>
+              <th style={{ padding: '0.25rem 0.5rem', fontWeight: 600 }}>New</th>
+              <th style={{ padding: '0.25rem 0.5rem', fontWeight: 600 }}>Dup</th>
+              <th style={{ padding: '0.25rem 0', fontWeight: 600 }}>Treatment</th>
+            </tr>
+          </thead>
+          <tbody>
+            {days.map(d => (
+              <tr key={d.dutyDate} style={{ borderTop: '1px solid var(--border-color)' }}>
+                <td style={{ padding: '0.25rem 0.5rem 0.25rem 0', fontWeight: 600, color: 'var(--text-heading)', whiteSpace: 'nowrap' }}>{fmtDay(d.dutyDate)}</td>
+                <td style={{ padding: '0.25rem 0.5rem' }}>{d.employees}</td>
+                <td style={{ padding: '0.25rem 0.5rem', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{fmtTime(d.from)} → {fmtTime(d.to)}</td>
+                <td style={{ padding: '0.25rem 0.5rem' }}>{d.newPunches}</td>
+                <td style={{ padding: '0.25rem 0.5rem', color: 'var(--text-muted)' }}>{d.dupPunches}</td>
+                <td style={{ padding: '0.25rem 0' }}>
+                  {d.flags.length
+                    ? d.flags.map(f => <span key={f} style={{ color: DAY_FLAG_META[f]?.color || 'var(--text-muted)', fontWeight: 600, marginRight: '0.4rem' }}>{DAY_FLAG_META[f]?.label || f}</span>)
+                    : <span style={{ color: d.newPunches > 0 ? 'var(--brand-primary-ink)' : 'var(--text-muted)' }}>{d.newPunches > 0 ? 'delta merged' : 'no change (overlap)'}</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {compact && summary.days.length > 5 && !showAll && (
+        <button onClick={() => setShowAll(true)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, color: 'var(--brand-primary-ink)', width: 'max-content' }}>
+          Show all {summary.days.length} day(s)
+        </button>
+      )}
+      {summary.truncated && <div style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }}>Only the most recent {summary.days.length} of {t.daysTouched} affected date(s) are listed.</div>}
+      {typeof onNavigate === 'function' && (
+        <button
+          onClick={() => onNavigate('attendance')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, color: 'var(--brand-primary-ink)', width: 'max-content' }}
+        >
+          <CalendarRange size={13} /> Review &amp; edit these days in Attendance →
+        </button>
+      )}
+    </div>
+  );
+}
+
 const emptyForm = {
   name: '', source_type: 'API', vendor: 'ZKTeco', base_url: '', username: '', password: '',
   token_type: 'JWT', sync_frequency_minutes: 60, backfillDays: 7, empCode: '',
   syncEmployees: false, autoFetch: false, columnMapJson: ''
 };
 
-export default function DataSources() {
+export default function DataSources({ onNavigate }) {
   const { authFetch: fetch, hasPerm } = useAuth();
   const [sources, setSources] = useState([]);
   const [summary, setSummary] = useState({});
   const [logs, setLogs] = useState([]);
+  const [expandedLogId, setExpandedLogId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null);
   const [message, setMessage] = useState(null);
@@ -68,6 +147,11 @@ export default function DataSources() {
   // Preview state (parse-only, shown before the admin confirms the import)
   const [preview, setPreview] = useState(null);
   const [previewing, setPreviewing] = useState(false);
+  // Guided import run: preview -> processing -> done | error (all inside one modal)
+  const [runStage, setRunStage] = useState('preview');
+  const [runOutcome, setRunOutcome] = useState(null);
+  const [runError, setRunError] = useState(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
 
   // Maintenance: attendance recompute + per-import revert
   const canEdit = hasPerm('SETTINGS_EDIT');
@@ -207,7 +291,12 @@ export default function DataSources() {
     try {
       const res = await fetch(`/api/v1/ingestion/sources/${src.id}/sync`, { method: 'POST' });
       const data = await res.json();
-      if (data.success) notify(`Sync complete — ${data.recordsImported} of ${data.recordsFound} records imported`);
+      if (data.success) {
+        const t = data.daySummary?.totals;
+        notify(t?.daysTouched
+          ? `Sync complete — ${data.recordsImported} of ${data.recordsFound} records imported · ${t.daysTouched} day(s) handled`
+          : `Sync complete — ${data.recordsImported} of ${data.recordsFound} records imported`);
+      }
       else notify(data.error || 'Sync failed', true);
       loadAll();
     } catch (err) { notify(err.message, true); }
@@ -229,6 +318,9 @@ export default function DataSources() {
     setPreviewing(true);
     setImportResult(null);
     setPreview(null);
+    setRunStage('preview');
+    setRunOutcome(null);
+    setRunError(null);
     try {
       const buf = await file.arrayBuffer();
       const res = await fetch('/api/v1/ingestion/preview', { method: 'POST', headers: uploadHeaders(), body: buf });
@@ -245,28 +337,55 @@ export default function DataSources() {
     }
   };
 
-  // Step 2: import only after the admin confirms the preview.
+  // Step 2: import only after the admin confirms the preview. All feedback stays
+  // INSIDE the modal (processing → complete/error) so nothing is silently lost.
   const performImport = async () => {
     if (!file) return;
     setUploading(true);
+    setRunError(null);
+    setRunStage('processing');
+    const t0 = Date.now();
+    setElapsedMs(0);
+    const tick = setInterval(() => setElapsedMs(Date.now() - t0), 100);
     try {
       const buf = await file.arrayBuffer();
       const res = await fetch('/api/v1/ingestion/upload', { method: 'POST', headers: uploadHeaders(), body: buf });
+      const ct = res.headers.get('content-type') || '';
+      if (!res.ok || !ct.includes('application/json')) {
+        const hint = res.status === 413 ? ' The file is too large for one upload.'
+          : res.status >= 500 ? ' The import may have timed out on the server — try again, or import a shorter date range.' : '';
+        throw new Error(`Import failed (HTTP ${res.status}).${hint}`);
+      }
       const data = await res.json();
       if (data.success) {
+        const durMs = data.import?.durationMs ?? (Date.now() - t0);
+        setRunOutcome({ ...data, durationMs: durMs });
+        setRunStage('done');
         setImportResult(data);
-        setPreview(null);
-        setFile(null);
-        notify(`Import complete — ${data.import.recordsImported} punches imported`);
         loadAll();
       } else {
-        notify(data.error || 'Import failed', true);
+        setRunError(data.error || 'Import failed');
+        setRunStage('error');
       }
     } catch (err) {
-      notify(`Upload failed: ${err.message}`, true);
+      setRunError(err.message || 'Upload failed');
+      setRunStage('error');
     } finally {
+      clearInterval(tick);
+      setElapsedMs(Date.now() - t0);
       setUploading(false);
     }
+  };
+
+  // Close the guided run modal from any finished stage; resets for the next file.
+  const closeRun = () => {
+    if (uploading) return;
+    setPreview(null);
+    setFile(null);
+    setRunStage('preview');
+    setRunOutcome(null);
+    setRunError(null);
+    setElapsedMs(0);
   };
 
   // ── Maintenance: rebuild attendance from the punches already stored, using each
@@ -857,6 +976,11 @@ export default function DataSources() {
                 {importResult.detectedTables?.length ? <div>Detected tables: <strong style={{ color: 'var(--text-heading)' }}>{importResult.detectedTables.join(', ')}</strong></div> : null}
                 {importResult.import.message && <div style={{ color: 'var(--text-muted)' }}>{importResult.import.message}</div>}
                 {importResult.import.status === 'PARTIAL' && <div style={{ color: 'var(--warning-ink)' }}>{importResult.import.message}</div>}
+                {importResult.import.daySummary && (
+                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.6rem', marginTop: '0.2rem' }}>
+                    <DayHandlingSummary summary={importResult.import.daySummary} compact onNavigate={onNavigate} />
+                  </div>
+                )}
               </div>
             )}
           </form>
@@ -987,37 +1111,62 @@ export default function DataSources() {
               {logs.length === 0 && (
                 <tr><td colSpan="9" style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>No sync activity yet.</td></tr>
               )}
-              {logs.map(l => (
-                <tr key={l.id} style={{ borderTop: '1px solid var(--border-color)' }}>
-                  <td style={{ padding: '0.6rem 0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{l.started_at ? new Date(l.started_at).toLocaleString('en-IN') : '—'}</td>
-                  <td style={{ padding: '0.6rem 0.9rem', fontWeight: 600, color: 'var(--text-heading)', whiteSpace: 'nowrap' }}>{l.source_name}</td>
-                  <td style={{ padding: '0.6rem 0.9rem' }}><StatusBadge status={l.sync_type} /></td>
-                  <td style={{ padding: '0.6rem 0.9rem' }}><StatusBadge status={l.status} /></td>
-                  <td style={{ padding: '0.6rem 0.9rem', textAlign: 'center' }}>{l.records_found}</td>
-                  <td style={{ padding: '0.6rem 0.9rem', textAlign: 'center', fontWeight: 700, color: 'var(--brand-primary-ink)' }}>{l.records_imported}</td>
-                  <td style={{ padding: '0.6rem 0.9rem', textAlign: 'center', color: 'var(--text-muted)' }}>{l.records_skipped}</td>
-                  <td style={{ padding: '0.6rem 0.9rem', color: 'var(--text-muted)', maxWidth: '320px' }}>{l.message}</td>
-                  <td style={{ padding: '0.6rem 0.9rem', whiteSpace: 'nowrap' }}>
-                    {l.reverted_at
-                      ? <span style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }}>reverted {new Date(l.reverted_at).toLocaleDateString('en-IN')}</span>
-                      : (canEdit && (l.tagged_punches || 0) > 0 ? (
-                        <button
-                          className="btn-swaniki"
-                          style={{ ...miniBtn, color: 'var(--danger-ink)', border: '1px solid rgba(244,63,94,0.35)' }}
-                          disabled={Boolean(busy)}
-                          onClick={() => handleRevert(l)}
-                          title={`Undo this import — removes its ${l.tagged_punches} tagged punch(es) and rebuilds attendance`}
-                        >
-                          {busy === `REVERT_${l.id}` ? <Loader2 size={13} className="spin" /> : <Undo2 size={13} />} Undo {l.tagged_punches}
-                        </button>
-                      ) : ((l.records_imported || 0) > 0 ? (
-                        <span style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }} title="This run was imported before punch batch-tagging existed, so its rows can't be singled out for removal">
-                          not tagged
-                        </span>
-                      ) : null))}
-                  </td>
-                </tr>
-              ))}
+              {logs.map(l => {
+                let daySum = null;
+                try { daySum = l.day_summary ? JSON.parse(l.day_summary) : null; } catch { /* legacy run */ }
+                const expanded = expandedLogId === l.id;
+                return (
+                  <React.Fragment key={l.id}>
+                    <tr style={{ borderTop: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '0.6rem 0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{l.started_at ? new Date(l.started_at).toLocaleString('en-IN') : '—'}</td>
+                      <td style={{ padding: '0.6rem 0.9rem', fontWeight: 600, color: 'var(--text-heading)', whiteSpace: 'nowrap' }}>{l.source_name}</td>
+                      <td style={{ padding: '0.6rem 0.9rem' }}><StatusBadge status={l.sync_type} /></td>
+                      <td style={{ padding: '0.6rem 0.9rem' }}><StatusBadge status={l.status} /></td>
+                      <td style={{ padding: '0.6rem 0.9rem', textAlign: 'center' }}>{l.records_found}</td>
+                      <td style={{ padding: '0.6rem 0.9rem', textAlign: 'center', fontWeight: 700, color: 'var(--brand-primary-ink)' }}>{l.records_imported}</td>
+                      <td style={{ padding: '0.6rem 0.9rem', textAlign: 'center', color: 'var(--text-muted)' }}>{l.records_skipped}</td>
+                      <td style={{ padding: '0.6rem 0.9rem', color: 'var(--text-muted)', maxWidth: '320px' }}>
+                        {l.message}
+                        {daySum?.totals?.daysTouched ? (
+                          <button
+                            onClick={() => setExpandedLogId(expanded ? null : l.id)}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', background: 'none', border: 'none', padding: 0, marginLeft: '0.4rem', cursor: 'pointer', fontSize: '0.6875rem', fontWeight: 700, color: 'var(--brand-primary-ink)' }}
+                          >
+                            <ChevronRight size={12} style={{ transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+                            {expanded ? 'hide' : `${daySum.totals.daysTouched} day(s) handled`}
+                          </button>
+                        ) : null}
+                      </td>
+                      <td style={{ padding: '0.6rem 0.9rem', whiteSpace: 'nowrap' }}>
+                        {l.reverted_at
+                          ? <span style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }}>reverted {new Date(l.reverted_at).toLocaleDateString('en-IN')}</span>
+                          : (canEdit && (l.tagged_punches || 0) > 0 ? (
+                            <button
+                              className="btn-swaniki"
+                              style={{ ...miniBtn, color: 'var(--danger-ink)', border: '1px solid rgba(244,63,94,0.35)' }}
+                              disabled={Boolean(busy)}
+                              onClick={() => handleRevert(l)}
+                              title={`Undo this import — removes its ${l.tagged_punches} tagged punch(es) and rebuilds attendance`}
+                            >
+                              {busy === `REVERT_${l.id}` ? <Loader2 size={13} className="spin" /> : <Undo2 size={13} />} Undo {l.tagged_punches}
+                            </button>
+                          ) : ((l.records_imported || 0) > 0 ? (
+                            <span style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }} title="This run was imported before punch batch-tagging existed, so its rows can't be singled out for removal">
+                              not tagged
+                            </span>
+                          ) : null))}
+                      </td>
+                    </tr>
+                    {expanded && daySum && (
+                      <tr style={{ background: 'var(--bg-surface-subtle)' }}>
+                        <td colSpan="9" style={{ padding: '0.75rem 0.9rem 0.9rem' }}>
+                          <DayHandlingSummary summary={daySum} onNavigate={onNavigate} />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1065,12 +1214,17 @@ export default function DataSources() {
         </div>
       )}
 
-      {/* Full-screen preview shown before the admin confirms the import */}
+      {/* Guided import: preview → confirm → processing → complete (all feedback in one modal) */}
       {preview && (
         <FilePreviewModal
           preview={preview}
           uploading={uploading}
-          onClose={() => { if (!uploading) setPreview(null); }}
+          stage={runStage}
+          outcome={runOutcome}
+          runError={runError}
+          elapsedMs={elapsedMs}
+          onNavigate={onNavigate}
+          onClose={closeRun}
           onConfirm={performImport}
         />
       )}
@@ -1252,15 +1406,123 @@ function RosterPreviewModal({ preview, busy, canApply, onClose, onApply }) {
   );
 }
 
-// Full-page preview table for a parsed (but not yet imported) biometric file.
-function FilePreviewModal({ preview, uploading, onClose, onConfirm }) {
+// Format a millisecond duration compactly (ms / s / m+s).
+function formatDuration(ms) {
+  const n = Math.max(0, Number(ms) || 0);
+  if (n < 1000) return `${n} ms`;
+  if (n < 60000) return `${(n / 1000).toFixed(1)} s`;
+  return `${Math.floor(n / 60000)}m ${Math.round((n % 60000) / 1000)}s`;
+}
+
+// Guided import modal: preview (review + confirm) → processing (live progress) →
+// done (ingestion summary + Close) | error (reason + retry/Close). All feedback
+// lives inside this overlay so nothing is silently shown behind a closed modal.
+function FilePreviewModal({ preview, uploading, stage = 'preview', outcome, runError, elapsedMs = 0, onNavigate, onClose, onConfirm }) {
   const [sheet, setSheet] = useState('punches');
   const hasEmployees = Array.isArray(preview.employees) && preview.employees.length > 0;
   useEscapeClose(!uploading, onClose);
 
   const bg = 'var(--bg-surface)';
   const headBg = 'var(--bg-surface-subtle)';
+  const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 'var(--z-modal)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' };
+  const cardBase = { width: 'min(1100px, 100%)', maxHeight: '92dvh', display: 'flex', flexDirection: 'column', background: bg, border: '1px solid var(--border-color)', borderRadius: '1rem', overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' };
 
+  const primaryBtn = (extra = {}) => ({ background: 'var(--brand-primary)', color: 'var(--on-primary)', padding: '0.55rem 1.4rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.45rem', ...extra });
+  const ghostBtn = { background: 'transparent', color: 'var(--text-muted)', padding: '0.5rem 1rem', fontSize: '0.8125rem', fontWeight: 600, border: '1px solid var(--border-color)', borderRadius: '0.5rem', cursor: 'pointer' };
+
+  // ── Processing / Done / Error: compact centered panels ────────────────
+  if (stage !== 'preview') {
+    const imp = outcome?.import || {};
+    const dupCount = Array.isArray(imp.duplicatePunches) ? imp.duplicatePunches.length : (imp.daySummary?.totals?.duplicatePunches || 0);
+    const durMs = outcome?.durationMs ?? imp.durationMs ?? elapsedMs;
+    const statusColor = imp.status === 'PARTIAL' ? 'var(--warning-ink)' : 'var(--brand-primary-ink)';
+    const stat = (label, value, color = 'var(--text-heading)') => (
+      <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+        <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-caption)' }}>{label}</span>
+        <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', fontWeight: 600, color, lineHeight: 1, letterSpacing: '-0.02em' }}>
+          {typeof value === 'number' ? value.toLocaleString('en-IN') : value}
+        </span>
+      </div>
+    );
+    return (
+      <div onClick={uploading ? undefined : onClose} style={overlay}>
+        <div onClick={e => e.stopPropagation()} style={{ ...cardBase, width: 'min(680px, 100%)' }}>
+          {/* PROCESSING */}
+          {stage === 'processing' && (
+            <div style={{ padding: '2.25rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+              <Loader2 size={40} className="spin" style={{ color: 'var(--brand-primary-ink)' }} />
+              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-heading)' }}>Importing your file…</h2>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                Writing <strong>{(preview.totalRows || 0).toLocaleString('en-IN')}</strong> punch rows and rebuilding attendance for
+                {' '}{(preview.distinctUsers || 0).toLocaleString('en-IN')} staff. Please keep this window open.
+              </p>
+              <div className="mono" style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--brand-primary-ink)', letterSpacing: '0.02em' }}>
+                {formatDuration(elapsedMs)}
+              </div>
+            </div>
+          )}
+
+          {/* DONE */}
+          {stage === 'done' && (
+            <>
+              <div style={{ padding: '1.6rem 1.75rem 0.9rem', textAlign: 'center', background: 'rgba(16,185,129,0.07)', borderBottom: '1px solid var(--border-color)' }}>
+                <CheckCircle2 size={38} style={{ color: 'var(--brand-primary-ink)' }} />
+                <h2 style={{ margin: '0.5rem 0 0.15rem', fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-heading)' }}>Ingestion complete</h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  {preview.fileName} · finished in <strong style={{ color: statusColor }}>{formatDuration(durMs)}</strong>
+                </div>
+              </div>
+              <div style={{ padding: '1.1rem 1.75rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.9rem', borderBottom: '1px solid var(--border-color)' }}>
+                {stat('Punches imported', imp.recordsImported || 0, 'var(--brand-primary-ink)')}
+                {stat('New punches', imp.newPunches || 0)}
+                {stat('Already recorded', dupCount, 'var(--text-muted)')}
+                {stat('Skipped', imp.recordsSkipped || 0, imp.recordsSkipped ? 'var(--warning-ink)' : 'var(--text-muted)')}
+                {stat('Staff matched', imp.employeesMatched || 0)}
+                {stat('Staff auto-created', imp.employeesCreated || 0, imp.employeesCreated ? 'var(--warning-ink)' : 'var(--brand-primary-ink)')}
+              </div>
+              <div style={{ padding: '0.9rem 1.75rem', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                  {imp.dateFrom && <span>Date range: <strong style={{ color: 'var(--text-heading)' }}>{String(imp.dateFrom).slice(0, 10)} → {String(imp.dateTo).slice(0, 10)}</strong></span>}
+                  {imp.devicesCreated ? <span>Devices created: <strong style={{ color: 'var(--text-heading)' }}>{imp.devicesCreated}</strong></span> : null}
+                </div>
+                {imp.message && <div style={{ fontSize: '0.78rem', color: imp.status === 'PARTIAL' ? 'var(--warning-ink)' : 'var(--text-muted)' }}>{imp.message}</div>}
+                {imp.daySummary && (
+                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.7rem' }}>
+                    <DayHandlingSummary summary={imp.daySummary} compact onNavigate={onNavigate} />
+                  </div>
+                )}
+              </div>
+              <div style={{ padding: '1rem 1.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', background: headBg }}>
+                <button className="btn-swaniki" onClick={onClose} style={primaryBtn()}>Close</button>
+              </div>
+            </>
+          )}
+
+          {/* ERROR */}
+          {stage === 'error' && (
+            <>
+              <div style={{ padding: '1.8rem 1.75rem 1rem', textAlign: 'center', background: 'rgba(185,28,28,0.08)', borderBottom: '1px solid var(--border-color)' }}>
+                <XCircle size={38} style={{ color: 'var(--danger-ink)' }} />
+                <h2 style={{ margin: '0.5rem 0 0.15rem', fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-heading)' }}>Import failed</h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{preview.fileName}</div>
+              </div>
+              <div style={{ padding: '1.2rem 1.75rem', fontSize: '0.85rem', color: 'var(--danger-ink)', lineHeight: 1.6 }}>
+                {runError || 'Something went wrong while importing this file.'}
+              </div>
+              <div style={{ padding: '1rem 1.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', background: headBg }}>
+                <button className="btn-swaniki" onClick={onClose} style={{ ...ghostBtn, background: 'transparent' }}>Close</button>
+                <button className="btn-swaniki" onClick={onConfirm} style={primaryBtn()}>
+                  <RefreshCw size={15} /> Try again
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Preview stage: review the decoded rows before confirming ──────────
   const stats = [
     { label: 'Rows', value: preview.totalRows, color: 'var(--text-heading)' },
     { label: 'Distinct users', value: preview.distinctUsers, color: 'var(--text-heading)' },
@@ -1268,12 +1530,11 @@ function FilePreviewModal({ preview, uploading, onClose, onConfirm }) {
     { label: 'New (will be created)', value: preview.newUsers, color: preview.newUsers > 0 ? 'var(--warning-ink)' : 'var(--brand-primary-ink)' }
   ];
   if (preview.skippedRows) stats.push({ label: 'Skipped rows', value: preview.skippedRows, color: 'var(--danger-ink)' });
-
   const empColumns = [{ key: 'biometricUserId', label: 'User ID' }, { key: 'fullName', label: 'Name' }, { key: 'known', label: 'Employee' }];
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 'var(--z-modal)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 'min(1100px, 100%)', maxHeight: '92dvh', display: 'flex', flexDirection: 'column', background: bg, border: '1px solid var(--border-color)', borderRadius: '1rem', overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
+    <div onClick={onClose} style={overlay}>
+      <div onClick={e => e.stopPropagation()} style={cardBase}>
         {/* Header */}
         <div style={{ padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
           <div>
@@ -1329,12 +1590,11 @@ function FilePreviewModal({ preview, uploading, onClose, onConfirm }) {
           <span style={{ marginRight: 'auto', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
             Importing will add {preview.totalRows.toLocaleString('en-IN')} punch{preview.totalRows === 1 ? '' : 'es'}{preview.newUsers > 0 ? ` and create ${preview.newUsers} new employee record${preview.newUsers === 1 ? '' : 's'}` : ''}.
           </span>
-          <button className="btn-swaniki" onClick={onClose} disabled={uploading} style={{ background: 'transparent', color: 'var(--text-muted)', padding: '0.5rem 1rem', fontSize: '0.8125rem', fontWeight: 600, border: '1px solid var(--border-color)', borderRadius: '0.5rem', cursor: uploading ? 'not-allowed' : 'pointer' }}>
+          <button className="btn-swaniki" onClick={onClose} disabled={uploading} style={ghostBtn}>
             Cancel
           </button>
-          <button className="btn-swaniki" onClick={onConfirm} disabled={uploading} style={{ background: 'var(--brand-primary)', color: 'var(--on-primary)', padding: '0.5rem 1.25rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem', cursor: uploading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', opacity: uploading ? 0.6 : 1 }}>
-            {uploading ? <Loader2 size={15} className="spin" /> : <CheckCircle2 size={15} />}
-            {uploading ? 'Importing…' : 'Confirm & Import'}
+          <button className="btn-swaniki" onClick={onConfirm} disabled={uploading} style={primaryBtn({ opacity: uploading ? 0.6 : 1, cursor: uploading ? 'not-allowed' : 'pointer' })}>
+            <CheckCircle2 size={15} /> Confirm &amp; Import
           </button>
         </div>
       </div>

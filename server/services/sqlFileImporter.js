@@ -17,6 +17,7 @@ const path = require('path');
 const { db } = require('../db/database');
 const { ingestPunch } = require('./attendanceEngine');
 const { writeSyncLog, finishSyncLog } = require('./syncLogger');
+const { attachDaySummary } = require('./daySummaryService');
 const { notify } = require('./notificationService');
 const { slugId, ensureDevice, ensureEmployee, defaultShiftId, defaultDepartmentId, knownBiometricIds } = require('./importerHelpers');
 
@@ -356,7 +357,7 @@ async function importFile({ buffer, filePath: existingPath, sourceId, sourceName
   const opts = { createEmployees: true, createDevices: true, ...options };
   const startedAt = new Date().toISOString();
   const logId = `sync_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const counters = { recordsFound: 0, recordsImported: 0, recordsSkipped: 0, employeesCreated: 0, devicesCreated: 0, createdNames: [], createdEmployeeIds: [], createdDeviceIds: [], detectedTables: [], errors: [] };
+  const counters = { recordsFound: 0, recordsImported: 0, recordsSkipped: 0, employeesCreated: 0, devicesCreated: 0, createdNames: [], createdEmployeeIds: [], createdDeviceIds: [], detectedTables: [], errors: [], duplicatePunches: [] };
 
   await writeSyncLog({ id: logId, sourceId, sourceName, syncType, startedAt, message: 'Import started' });
 
@@ -440,6 +441,10 @@ async function importFile({ buffer, filePath: existingPath, sourceId, sourceName
         });
         if (result && (result.status === 'SUCCESS' || result.status === 'DUPLICATE_IGNORED')) {
           counters.recordsImported += 1;
+          // Keep dedup-ignored punches so the day summary can account for overlap
+          if (result.status === 'DUPLICATE_IGNORED') {
+            counters.duplicatePunches.push({ biometricUserId: punch.biometricUserId, punchTime: punch.punchTime });
+          }
         } else {
           counters.recordsSkipped += 1;
         }
@@ -456,6 +461,12 @@ async function importFile({ buffer, filePath: existingPath, sourceId, sourceName
 
     await finishSyncLog(logId, status, counters, message);
 
+    // How were the affected duty dates treated? (merge vs new vs protected…)
+    const daySummary = await attachDaySummary(logId, {
+      duplicatePunches: counters.duplicatePunches,
+      startedAtIso: startedAt
+    });
+
     // Digest email to HR admins when an import created staff records.
     if (counters.employeesCreated > 0) {
       await notify('employee.created', {
@@ -470,7 +481,7 @@ async function importFile({ buffer, filePath: existingPath, sourceId, sourceName
       await db.run(`UPDATE data_sources SET last_sync_at = ?, updated_at = CURRENT_TIMESTAMP, status = 'ACTIVE' WHERE id = ?`, new Date().toISOString(), sourceId);
     }
 
-    return { ...counters, status };
+    return { ...counters, status, daySummary };
   } catch (err) {
     await finishSyncLog(logId, 'FAILED', counters, err.message);
     if (sourceId) {
