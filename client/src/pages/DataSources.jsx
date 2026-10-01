@@ -162,6 +162,8 @@ export default function DataSources({ onNavigate }) {
   const [runOutcome, setRunOutcome] = useState(null);
   const [runError, setRunError] = useState(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  // Live ingest counts streamed from the server while the import runs: { found, imported }
+  const [progress, setProgress] = useState(null);
 
   // Maintenance: attendance recompute + per-import revert
   const canEdit = hasPerm('SETTINGS_EDIT');
@@ -331,6 +333,7 @@ export default function DataSources({ onNavigate }) {
     setRunStage('preview');
     setRunOutcome(null);
     setRunError(null);
+    setProgress(null);
     try {
       const buf = await file.arrayBuffer();
       const res = await fetch('/api/v1/ingestion/preview', { method: 'POST', headers: uploadHeaders(), body: buf });
@@ -356,7 +359,21 @@ export default function DataSources({ onNavigate }) {
     setRunStage('processing');
     const t0 = Date.now();
     setElapsedMs(0);
+    // Seed an optimistic denominator from the preview so the bar has scale instantly,
+    // then let the server-poll refine it. `imported` climbs as chunks commit.
+    setProgress({ found: preview?.totalRows || 0, imported: 0 });
     const tick = setInterval(() => setElapsedMs(Date.now() - t0), 100);
+    let pollBusy = false;
+    const poll = setInterval(async () => {
+      if (pollBusy) return; // don't stack requests if one is slow
+      pollBusy = true;
+      try {
+        const r = await fetch('/api/v1/ingestion/progress');
+        const d = await r.json();
+        if (d.success && d.progress) setProgress({ found: d.progress.recordsFound, imported: d.progress.recordsImported });
+      } catch { /* transient poll errors are fine; final result comes from /upload */ }
+      finally { pollBusy = false; }
+    }, 350);
     try {
       const buf = await file.arrayBuffer();
       const res = await fetch('/api/v1/ingestion/upload', { method: 'POST', headers: uploadHeaders(), body: buf });
@@ -382,6 +399,7 @@ export default function DataSources({ onNavigate }) {
       setRunStage('error');
     } finally {
       clearInterval(tick);
+      clearInterval(poll);
       setElapsedMs(Date.now() - t0);
       setUploading(false);
     }
@@ -395,6 +413,7 @@ export default function DataSources({ onNavigate }) {
     setRunStage('preview');
     setRunOutcome(null);
     setRunError(null);
+    setProgress(null);
     setElapsedMs(0);
   };
 
@@ -1233,6 +1252,7 @@ export default function DataSources({ onNavigate }) {
           outcome={runOutcome}
           runError={runError}
           elapsedMs={elapsedMs}
+          progress={progress}
           onNavigate={onNavigate}
           onClose={closeRun}
           onConfirm={performImport}
@@ -1427,7 +1447,7 @@ function formatDuration(ms) {
 // Guided import modal: preview (review + confirm) → processing (live progress) →
 // done (ingestion summary + Close) | error (reason + retry/Close). All feedback
 // lives inside this overlay so nothing is silently shown behind a closed modal.
-function FilePreviewModal({ preview, uploading, stage = 'preview', outcome, runError, elapsedMs = 0, onNavigate, onClose, onConfirm }) {
+function FilePreviewModal({ preview, uploading, stage = 'preview', outcome, runError, elapsedMs = 0, progress = null, onNavigate, onClose, onConfirm }) {
   const [sheet, setSheet] = useState('punches');
   const hasEmployees = Array.isArray(preview.employees) && preview.employees.length > 0;
   useEscapeClose(!uploading, onClose);
@@ -1458,19 +1478,42 @@ function FilePreviewModal({ preview, uploading, stage = 'preview', outcome, runE
       <div onClick={uploading ? undefined : onClose} style={overlay}>
         <div onClick={e => e.stopPropagation()} style={{ ...cardBase, width: 'min(680px, 100%)' }}>
           {/* PROCESSING */}
-          {stage === 'processing' && (
-            <div style={{ padding: '2.25rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
-              <Loader2 size={40} className="spin" style={{ color: 'var(--brand-primary-ink)' }} />
-              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-heading)' }}>Importing your file…</h2>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                Writing <strong>{(preview.totalRows || 0).toLocaleString('en-IN')}</strong> punch rows and rebuilding attendance for
-                {' '}{(preview.distinctUsers || 0).toLocaleString('en-IN')} staff. Please keep this window open.
-              </p>
-              <div className="mono" style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--brand-primary-ink)', letterSpacing: '0.02em' }}>
-                {formatDuration(elapsedMs)}
+          {stage === 'processing' && (() => {
+            const imported = progress?.imported ?? 0;
+            const found = (progress?.found ?? preview.totalRows ?? 0) || 0;
+            const pct = found > 0 ? Math.min(100, Math.round((imported / found) * 100)) : 0;
+            const barPct = Math.max(pct, imported > 0 ? pct : 5); // a sliver before the first count
+            return (
+              <div style={{ padding: '2.25rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.15rem', textAlign: 'center' }}>
+                <Loader2 size={38} className="spin" style={{ color: 'var(--brand-primary-ink)' }} />
+                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-heading)' }}>Importing your file…</h2>
+                {/* Big live count */}
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '0.4rem' }}>
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '2.6rem', fontWeight: 800, color: 'var(--brand-primary-ink)', lineHeight: 1, letterSpacing: '-0.03em' }}>
+                    {imported.toLocaleString('en-IN')}
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                    / {found.toLocaleString('en-IN')}
+                  </span>
+                  <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--text-caption)', textTransform: 'uppercase', letterSpacing: '0.08em', marginLeft: '0.3rem' }}>records</span>
+                </div>
+                {/* Progress bar */}
+                <div style={{ width: '100%', maxWidth: '30rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <div style={{ width: '100%', height: '0.7rem', background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${barPct}%`, background: 'linear-gradient(90deg, var(--brand-primary), var(--brand-primary-ink))', borderRadius: '9999px', transition: 'width 0.35s cubic-bezier(0.22, 1, 0.36, 1)' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--brand-primary-ink)' }}>{pct}% ingested</span>
+                    <span className="mono">{formatDuration(elapsedMs)}</span>
+                  </div>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: '30rem' }}>
+                  Writing <strong>{(preview.totalRows || 0).toLocaleString('en-IN')}</strong> punch rows and rebuilding attendance for
+                  {' '}{(preview.distinctUsers || 0).toLocaleString('en-IN')} staff. Please keep this window open.
+                </p>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* DONE */}
           {stage === 'done' && (

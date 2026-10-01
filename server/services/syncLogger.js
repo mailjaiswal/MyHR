@@ -28,4 +28,19 @@ async function finishSyncLog(id, status, counters, message) {
   );
 }
 
-module.exports = { writeSyncLog, finishSyncLog };
+/**
+ * updateSyncLogProgress — stream live ingest counts to a still-RUNNING row so the
+ * UI can poll them (serverless /upload keeps writing to the shared DB while a
+ * separate GET reads it). COALESCE guards keep earlier values; only touches the
+ * row while it is still RUNNING so it can never race the final finishSyncLog write.
+ */
+async function updateSyncLogProgress(id, { recordsFound, recordsImported } = {}) {
+  await db.run(`
+    UPDATE sync_logs
+    SET records_found = COALESCE(?, records_found),
+        records_imported = COALESCE(?, records_imported)
+    WHERE id = ? AND status = 'RUNNING'
+  `, recordsFound ?? null, recordsImported ?? null, id);
+}
+
+module.exports = { writeSyncLog, finishSyncLog, updateSyncLogProgress };

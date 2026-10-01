@@ -430,7 +430,7 @@ async function rebuildAttendanceForEmployees(employees) {
  * attendance for only the touched staff. Returns counts + the dedup-ignored list
  * so the caller can build the day-handling summary.
  */
-async function bulkIngestPunches({ deviceId, punches = [], importBatch = null, sourceId = null, ensureEmployee = null }) {
+async function bulkIngestPunches({ deviceId, punches = [], importBatch = null, sourceId = null, ensureEmployee = null, onProgress = null }) {
   const out = {
     newPunches: 0, duplicatePunches: 0, recordsSkipped: 0,
     duplicateList: [], employeesMatched: 0, employeesCreated: 0,
@@ -446,6 +446,13 @@ async function bulkIngestPunches({ deviceId, punches = [], importBatch = null, s
     if (!byHash.has(hash)) byHash.set(hash, { ...p, punchTime: iso, hash });
   }
   const candidates = [...byHash.values()];
+  // Rows folded away by the in-file dedup above still count as "handled" so a
+  // progress bar can climb to the true raw total.
+  const intraDup = punches.length - candidates.length;
+  const emit = async () => {
+    if (!onProgress) return;
+    try { await onProgress(intraDup + out.duplicatePunches + out.recordsSkipped + out.newPunches); } catch { /* best-effort */ }
+  };
 
   // 2. Resolve employees for distinct biometric ids (batched) + auto-create missing.
   const bios = [...new Set(candidates.map(c => String(c.biometricUserId)))];
@@ -489,6 +496,7 @@ async function bulkIngestPunches({ deviceId, punches = [], importBatch = null, s
     newRows.push(c);
     touchedBios.add(String(c.biometricUserId));
   }
+  await emit(); // duplicates + skipped are now fully accounted for
 
   // 5. Bulk insert new raw punches (ON CONFLICT guards any race with the read above).
   const now = Date.now();
@@ -506,6 +514,7 @@ async function bulkIngestPunches({ deviceId, punches = [], importBatch = null, s
       ON CONFLICT (punch_hash) DO NOTHING
     `, ...params);
     out.newPunches += (res.changes || 0);
+    await emit(); // report progress after every committed chunk
   }
 
   // 6. Device heartbeat.

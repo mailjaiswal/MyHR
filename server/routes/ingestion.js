@@ -264,6 +264,27 @@ router.post('/upload', requirePerm('SETTINGS_EDIT'), (req, res) => {
   });
 });
 
+// ── 7b. Live import progress (polled by the UI while /upload is mid-flight) ──
+// The /upload serverless invocation streams counts into the RUNNING sync_logs row
+// (shared DB), so this separate read-only request can observe them cross-instance.
+// Returns the newest still-RUNNING file import; null once it finishes.
+router.get('/progress', async (req, res) => {
+  try {
+    const row = await db.get(`
+      SELECT id, records_found, records_imported
+      FROM sync_logs
+      WHERE status = 'RUNNING' AND sync_type = 'FILE_IMPORT'
+      ORDER BY started_at DESC LIMIT 1
+    `);
+    return res.json({
+      success: true,
+      progress: row ? { logId: row.id, recordsFound: Number(row.records_found) || 0, recordsImported: Number(row.records_imported) || 0 } : null
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── 8. Sync log history ────────────────────────────────────────────────
 // `tagged_punches` = how many punches still carry this run's import_batch marker,
 // i.e. how many rows an "Undo" on this run would actually remove. Legacy imports

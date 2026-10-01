@@ -19,7 +19,7 @@
 
 const { db } = require('../db/database');
 const { bulkIngestPunches } = require('./attendanceEngine');
-const { writeSyncLog, finishSyncLog } = require('./syncLogger');
+const { writeSyncLog, finishSyncLog, updateSyncLogProgress } = require('./syncLogger');
 const { attachDaySummary } = require('./daySummaryService');
 const { resolveDeviceId, ensureEmployee, knownBiometricIds } = require('./importerHelpers');
 const { notify } = require('./notificationService');
@@ -160,6 +160,9 @@ async function importAttlog({ buffer, fileName, deviceSerial, sourceId, sourceNa
     const parsed = parseAttlog(buffer, fileName);
     const serial = deviceSerial || parsed.serial || null;
     counters.recordsFound = parsed.punches.length;
+    const totalRows = parsed.punches.length;
+    // Seed the live progress row so the polling UI has a denominator immediately.
+    await updateSyncLogProgress(logId, { recordsFound: totalRows, recordsImported: 0 });
 
     // Pre-resolve the device once (all punches in one ATTLOG file come from one terminal)
     const deviceId = await resolveDeviceId(serial, { createDevices: opts.createDevices, counters });
@@ -173,6 +176,7 @@ async function importAttlog({ buffer, fileName, deviceSerial, sourceId, sourceNa
       })),
       importBatch: logId,
       sourceId,
+      onProgress: async (done) => { await updateSyncLogProgress(logId, { recordsImported: Math.min(done, totalRows) }); },
       ensureEmployee: opts.createEmployees
         ? (args) => ensureEmployee(args, true, counters)
         : null
@@ -185,6 +189,10 @@ async function importAttlog({ buffer, fileName, deviceSerial, sourceId, sourceNa
     counters.recordsImported = bulk.newPunches + bulk.duplicatePunches;
     counters.recordsSkipped = bulk.recordsSkipped;
     counters.errors = bulk.errors || [];
+
+    // Ensure the bar reaches 100% even if in-file dedup kept the running count
+    // a hair under the raw total; the client polls this before the response lands.
+    await updateSyncLogProgress(logId, { recordsImported: totalRows });
 
     const durationMs = Date.now() - startedAtMs;
     const status = (counters.errors.length && counters.recordsImported === 0)
