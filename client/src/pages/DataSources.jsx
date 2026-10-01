@@ -1563,54 +1563,58 @@ function FilePreviewModal({ preview, uploading, stage = 'preview', outcome, runE
             );
           })()}
 
-          {/* DONE */}
+          {/* DONE — pinned header + scrollable body + pinned footer, so Close is always reachable */}
           {stage === 'done' && (
             <>
-              <div style={{ padding: '1.6rem 1.75rem 0.9rem', textAlign: 'center', background: 'rgba(16,185,129,0.07)', borderBottom: '1px solid var(--border-color)' }}>
+              <div style={{ position: 'relative', flexShrink: 0, padding: '1.6rem 1.75rem 0.9rem', textAlign: 'center', background: 'rgba(16,185,129,0.07)', borderBottom: '1px solid var(--border-color)' }}>
+                <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: '0.7rem', right: '0.85rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem', lineHeight: 0 }}><X size={20} /></button>
                 <CheckCircle2 size={38} style={{ color: 'var(--brand-primary-ink)' }} />
                 <h2 style={{ margin: '0.5rem 0 0.15rem', fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-heading)' }}>{doneTitle}</h2>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                   {preview.fileName} · finished in <strong style={{ color: statusColor }}>{formatDuration(durMs)}</strong>
                 </div>
               </div>
-              <div style={{ padding: '1.1rem 1.75rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.9rem', borderBottom: '1px solid var(--border-color)' }}>
-                {stat('Punches imported', imp.recordsImported || 0, 'var(--brand-primary-ink)')}
-                {stat('New punches', imp.newPunches || 0)}
-                {stat('Already recorded', dupCount, 'var(--text-muted)')}
-                {stat('Skipped', imp.recordsSkipped || 0, imp.recordsSkipped ? 'var(--warning-ink)' : 'var(--text-muted)')}
-                {stat('Staff matched', imp.employeesMatched || 0)}
-                {stat('Staff auto-created', imp.employeesCreated || 0, imp.employeesCreated ? 'var(--warning-ink)' : 'var(--brand-primary-ink)')}
-              </div>
-              <div style={{ padding: '0.9rem 1.75rem', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                  {imp.dateFrom && <span>Date range: <strong style={{ color: 'var(--text-heading)' }}>{String(imp.dateFrom).slice(0, 10)} → {String(imp.dateTo).slice(0, 10)}</strong></span>}
-                  {imp.devicesCreated ? <span>Devices created: <strong style={{ color: 'var(--text-heading)' }}>{imp.devicesCreated}</strong></span> : null}
+              <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ flexShrink: 0, padding: '1.1rem 1.75rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.9rem', borderBottom: '1px solid var(--border-color)' }}>
+                  {stat('Punches imported', imp.recordsImported || 0, 'var(--brand-primary-ink)')}
+                  {stat('New punches', imp.newPunches || 0)}
+                  {stat('Already recorded', dupCount, 'var(--text-muted)')}
+                  {stat('Skipped', imp.recordsSkipped || 0, imp.recordsSkipped ? 'var(--warning-ink)' : 'var(--text-muted)')}
+                  {stat('Staff matched', imp.employeesMatched || 0)}
+                  {stat('Staff auto-created', imp.employeesCreated || 0, imp.employeesCreated ? 'var(--warning-ink)' : 'var(--brand-primary-ink)')}
                 </div>
-                {imp.message && <div style={{ fontSize: '0.78rem', color: imp.status === 'PARTIAL' ? 'var(--warning-ink)' : 'var(--text-muted)' }}>{imp.message}</div>}
-                {imp.daySummary && (
-                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.7rem' }}>
-                    <DayHandlingSummary summary={imp.daySummary} compact onNavigate={onNavigate} />
+                <div style={{ padding: '0.9rem 1.75rem', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                    {imp.dateFrom && <span>Date range: <strong style={{ color: 'var(--text-heading)' }}>{String(imp.dateFrom).slice(0, 10)} → {String(imp.dateTo).slice(0, 10)}</strong></span>}
+                    {imp.devicesCreated ? <span>Devices created: <strong style={{ color: 'var(--text-heading)' }}>{imp.devicesCreated}</strong></span> : null}
                   </div>
-                )}
+                  {imp.message && <div style={{ fontSize: '0.78rem', color: imp.status === 'PARTIAL' ? 'var(--warning-ink)' : 'var(--text-muted)' }}>{imp.message}</div>}
+                  {imp.daySummary && (
+                    <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.7rem' }}>
+                      <DayHandlingSummary summary={imp.daySummary} compact onNavigate={onNavigate} />
+                    </div>
+                  )}
+                </div>
               </div>
-              <div style={{ padding: '1rem 1.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', background: headBg }}>
+              <div style={{ flexShrink: 0, padding: '1rem 1.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', background: headBg }}>
                 <button className="btn-swaniki" onClick={onClose} style={primaryBtn()}>Close</button>
               </div>
             </>
           )}
 
-          {/* ERROR */}
+          {/* ERROR — pinned header + scrollable body + pinned footer */}
           {stage === 'error' && (
             <>
-              <div style={{ padding: '1.8rem 1.75rem 1rem', textAlign: 'center', background: 'rgba(185,28,28,0.08)', borderBottom: '1px solid var(--border-color)' }}>
+              <div style={{ position: 'relative', flexShrink: 0, padding: '1.8rem 1.75rem 1rem', textAlign: 'center', background: 'rgba(185,28,28,0.08)', borderBottom: '1px solid var(--border-color)' }}>
+                <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: '0.7rem', right: '0.85rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem', lineHeight: 0 }}><X size={20} /></button>
                 <XCircle size={38} style={{ color: 'var(--danger-ink)' }} />
                 <h2 style={{ margin: '0.5rem 0 0.15rem', fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-heading)' }}>{errorTitle}</h2>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{preview.fileName}</div>
               </div>
-              <div style={{ padding: '1.2rem 1.75rem', fontSize: '0.85rem', color: 'var(--danger-ink)', lineHeight: 1.6 }}>
+              <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '1.2rem 1.75rem', fontSize: '0.85rem', color: 'var(--danger-ink)', lineHeight: 1.6 }}>
                 {runError || 'Something went wrong while importing this file.'}
               </div>
-              <div style={{ padding: '1rem 1.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', background: headBg }}>
+              <div style={{ flexShrink: 0, padding: '1rem 1.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', background: headBg }}>
                 <button className="btn-swaniki" onClick={onClose} style={{ ...ghostBtn, background: 'transparent' }}>Close</button>
                 <button className="btn-swaniki" onClick={onConfirm} style={primaryBtn()}>
                   <RefreshCw size={15} /> Try again
