@@ -8,6 +8,12 @@ const attlog = require('../services/attlogImporter');
 const syncEngine = require('../services/syncEngine');
 const { recomputeAttendance } = require('../services/attendanceEngine');
 const roster = require('../services/rosterImporter');
+const { sniff } = require('../services/fileSniffer');
+const smart = require('../services/smartIngest');
+const { FIELD_SPEC } = require('../services/fieldSpec');
+const punch = require('../services/punchFileImporter');
+const { buildPrefilledTemplate } = require('../services/excelTemplateService');
+const { writeSyncLog, finishSyncLog, updateSyncLogProgress } = require('../services/syncLogger');
 const { requireAuth } = require('../middleware/authGuard');
 const { accessGuard, requirePerm } = require('../middleware/accessGuard');
 const { audit, diffFields } = require('../services/auditService');
@@ -17,6 +23,60 @@ router.use(requireAuth, accessGuard, requirePerm('SETTINGS_VIEW'));
 
 function makeId(prefix) {
   return `${prefix}_${Date.now()}${crypto.randomBytes(3).toString('hex')}`;
+}
+
+// ── Smart roster ingestion helpers (shared by /roster/parse + /roster/apply) ──
+// Read a raw request body into a Buffer (roster/punch files are posted as octet-stream).
+function readRaw(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
+    req.on('error', reject);
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+  });
+}
+
+// Apply an admin-corrected mapping over the engine's auto-mapping. `override` is
+// { fieldKey: columnIndex | null } — null un-maps a field, an index pins a column.
+function buildMappingOverride(sheet, override) {
+  const base = smart.mapColumns(sheet.columns);
+  if (!override || typeof override !== 'object') return base;
+  const mapping = { ...base.mapping };
+  for (const [k, col] of Object.entries(override)) {
+    if (!Object.prototype.hasOwnProperty.call(mapping, k)) continue;
+    if (col === null || col === undefined || col === -1) { mapping[k] = { column: null, header: null, confidence: 'none' }; continue; }
+    const c = sheet.columns.find(cc => cc.index === Number(col));
+    mapping[k] = { column: Number(col), header: c ? c.header : `Column ${col}`, confidence: 'manual' };
+  }
+  const used = new Set(Object.values(mapping).filter(m => m.column != null).map(m => m.column));
+  const unmappedColumns = sheet.columns.filter(c => c.header && !used.has(c.index)).map(c => ({ index: c.index, header: c.header }));
+  return { mapping, unmappedColumns };
+}
+
+// Parse + map a sniffed roster buffer into canonical rows (used by parse + apply).
+function rowsFromRoster(raw, fileName, opts = {}) {
+  const sniffed = sniff(raw, fileName);
+  const idx = Number.isInteger(opts.sheetIndex) ? opts.sheetIndex : sniffed.bestSheetIndex;
+  const sheet = sniffed.sheets[idx] || sniffed.sheets[sniffed.bestSheetIndex];
+  if (!sheet || !sheet.columns.length) throw new Error('No readable columns found in this file.');
+  const { mapping, unmappedColumns } = buildMappingOverride(sheet, opts.mapping);
+  const rows = smart.buildEmployeeRows(sheet, mapping);
+  return { sniffed, sheet, sheetIndex: sniffed.sheets.indexOf(sheet), mapping, unmappedColumns, rows };
+}
+
+// Flag obvious data-quality issues so the admin can eyeball them before confirming.
+function detectAnomalies(rows) {
+  const warnings = [];
+  const seen = new Set(); const dup = new Set();
+  for (const r of rows) { const id = r.biometricUserId; if (id) { if (seen.has(id)) dup.add(id); seen.add(id); } }
+  if (dup.size) warnings.push({ type: 'duplicate_biometric_ids', message: `Duplicate Biometric ID(s) in file: ${[...dup].slice(0, 10).join(', ')}`, count: dup.size });
+  const badDates = rows.filter(r => (r.dateOfJoining && !/^\d{4}-\d{2}-\d{2}$/.test(r.dateOfJoining)) || (r.dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(r.dateOfBirth))).length;
+  if (badDates) warnings.push({ type: 'invalid_dates', message: `${badDates} row(s) have an unparsable date`, count: badDates });
+  const neg = rows.filter(r => r.baseCtc && Number(r.baseCtc) < 0).length;
+  if (neg) warnings.push({ type: 'negative_salary', message: `${neg} row(s) have a negative salary`, count: neg });
+  const noName = rows.filter(r => !r.fullName).length;
+  if (noName) warnings.push({ type: 'missing_name', message: `${noName} row(s) have no name`, count: noName });
+  return warnings;
 }
 
 // ── 1. List all data sources ───────────────────────────────────────────
@@ -203,7 +263,11 @@ router.post('/preview', requirePerm('SETTINGS_EDIT'), (req, res) => {
       } else if (importer.isSqliteBuffer(raw) || loader.looksLikeSqlText(raw)) {
         preview = await importer.previewFile(raw, { columnMap: options.columnMap });
       } else {
-        return res.status(400).json({ error: 'Unrecognized file. Expected a ZKTeco ATTLOG .dat text export, a SQLite (.db) database, or a SQL text dump.' });
+        // CSV / XLSX / XLS / ODS punch export (user id + timestamp columns).
+        try { preview = await punch.previewPunchFile(raw, fileName); }
+        catch (pe) {
+          return res.status(400).json({ error: 'Unrecognized file. For punches, expected a ZKTeco ATTLOG .dat, a SQLite (.db), a SQL text dump, or a punch spreadsheet (CSV/XLSX with a User ID + timestamp column). If this is an employee list, upload it under "Employee / Roster Master" below.' });
+        }
       }
       preview.fileName = preview.fileName || fileName;
       if (req.headers['x-device-serial']) preview.deviceSerial = String(req.headers['x-device-serial']) || preview.deviceSerial;
@@ -249,7 +313,16 @@ router.post('/upload', requirePerm('SETTINGS_EDIT'), (req, res) => {
         summary = await importer.importFile({ buffer: raw, sourceId, sourceName, syncType: 'FILE_IMPORT', options });
         detectedTables = summary.detectedTables;
       } else {
-        return res.status(400).json({ error: 'Unrecognized file. Expected a ZKTeco ATTLOG .dat text export, a SQLite (.db) database, or a SQL text dump.' });
+        // CSV / XLSX / XLS / ODS punch export → same bulk-ingest pipeline as ATTLOG.
+        try {
+          summary = await punch.importPunchFile({
+            buffer: raw, fileName,
+            deviceSerial: req.headers['x-device-serial'] ? String(req.headers['x-device-serial']) : null,
+            sourceId, sourceName, options
+          });
+        } catch (pe) {
+          return res.status(400).json({ error: pe.message });
+        }
       }
       const logRow = await db.get(`SELECT * FROM sync_logs WHERE sync_type = 'FILE_IMPORT' ORDER BY started_at DESC LIMIT 1`);
       await audit(req, 'ingestion.file_import', {
@@ -402,8 +475,108 @@ router.get('/roster/template', requirePerm('SETTINGS_EDIT'), async (req, res) =>
   }
 });
 
-// Body: { rows: [ { biometricUserId, employeeCode, fullName, designation, department,
-//                   shift, email, mobile, baseCtc, dateOfJoining, gender } ] }
+// 12c. Smart roster PARSE (format-agnostic): sniff the uploaded file (CSV/TSV/XLSX/XLS/ODS),
+// auto-map its columns onto the canonical field model, normalize values, and return a
+// preview + column-mapping (editable) + capture report + warnings — nothing is written yet.
+// Raw body (octet-stream) like /preview. Optional X-Options: { sheetIndex, mapping }.
+router.post('/roster/parse', requirePerm('SETTINGS_EDIT'), async (req, res) => {
+  try {
+    const raw = await readRaw(req);
+    if (!raw.length) return res.status(400).json({ error: 'No file body received. Send the roster file as raw body.' });
+    const fileName = req.headers['x-file-name'] ? String(req.headers['x-file-name']) : null;
+    let opts = {}; try { opts = JSON.parse(req.headers['x-options'] || '{}'); } catch (e) { /* ignore */ }
+
+    const { sniffed, sheet, sheetIndex, mapping, unmappedColumns, rows } = rowsFromRoster(raw, fileName, opts);
+    if (!rows.length) return res.status(400).json({ error: 'No employee rows detected. Ensure a Biometric ID / Name / Employee Code column is present and not hidden.' });
+
+    const classification = await roster.analyzeRoster(rows, { apply: false });
+    const warnings = detectAnomalies(rows);
+    const unknownDeptShift = classification.rows.filter(r => /\(unknown\)/.test(`${r.departmentName} ${r.shiftName}`)).length;
+    if (unknownDeptShift) warnings.push({ type: 'unknown_dept_shift', message: `${unknownDeptShift} row(s) name a department/shift that isn't set up — those cells are left unchanged`, count: unknownDeptShift });
+
+    return res.json({
+      success: true,
+      parse: {
+        fileName: fileName || null, detectedFormat: sniffed.format, sheetNames: sniffed.sheetNames, sheetIndex,
+        columns: sheet.columns, fields: FIELD_SPEC.map(f => ({ key: f.key, label: f.label, group: f.group, required: f.required, type: f.type })),
+        mapping, unmappedColumns,
+        rowsCount: rows.length, previewRows: rows.slice(0, 200),
+        summary: classification.summary, report: classification.report, warnings
+      }
+    });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// 12d. Prepopulated, gap-highlighted Employee Master (.xlsx) — current data + amber blanks
+// + dropdown validation + a "Complete These Fields" gap sheet. Re-upload it after filling.
+router.get('/roster/template.xlsx', requirePerm('SETTINGS_EDIT'), async (req, res) => {
+  try {
+    const buf = await buildPrefilledTemplate();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="myHR_Employee_Master_Prefilled.xlsx"');
+    return res.send(buf);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 12e. Apply a roster. Two ways in:
+//   • raw file (octet-stream) + optional X-Options { sheetIndex, mapping } → re-parses with
+//     the admin's corrected mapping (preferred; keeps large files off the JSON limit); OR
+//   • JSON { rows: [canonical...] } (small/manual payloads, backward-compatible).
+// Writes a MANUAL sync log so it appears in history + /progress streams row counts.
+router.post('/roster/apply', requirePerm('EMPLOYEES_EDIT'), async (req, res) => {
+  let logId;
+  try {
+    const ct = req.headers['content-type'] || '';
+    let rows;
+    if (ct.includes('application/json') && Array.isArray(req.body?.rows)) {
+      rows = req.body.rows;
+    } else {
+      const raw = await readRaw(req);
+      if (!raw.length) return res.status(400).json({ error: 'No file body received.' });
+      const fileName = req.headers['x-file-name'] ? String(req.headers['x-file-name']) : null;
+      let opts = {}; try { opts = JSON.parse(req.headers['x-options'] || '{}'); } catch (e) { /* ignore */ }
+      rows = rowsFromRoster(raw, fileName, opts).rows;
+    }
+    if (!rows || !rows.length) return res.status(400).json({ error: 'No rows to apply' });
+    if (rows.length > 5000) return res.status(400).json({ error: 'Too many rows (max 5000)' });
+
+    const sourceName = req.headers['x-source-name'] ? String(req.headers['x-source-name']) : 'Employee Roster Import';
+    logId = `sync_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`;
+    await writeSyncLog({ id: logId, sourceId: null, sourceName, syncType: 'MANUAL', startedAt: new Date().toISOString(), message: `Roster import started (${rows.length} rows)` });
+    await updateSyncLogProgress(logId, { recordsFound: rows.length, recordsImported: 0 });
+    let lastEmit = 0;
+    const onProgress = async (done) => { if (done - lastEmit >= 25 || done === rows.length) { lastEmit = done; await updateSyncLogProgress(logId, { recordsImported: done }); } };
+
+    const result = await roster.analyzeRoster(rows, { apply: true, onProgress });
+
+    let recompute = null;
+    if (result.recomputeEmployeeIds.length) recompute = await recomputeAttendance({ employeeIds: result.recomputeEmployeeIds });
+
+    const applied = result.summary.updated + result.summary.created;
+    const status = result.summary.errors ? (applied ? 'PARTIAL' : 'FAILED') : 'SUCCESS';
+    const message = `Roster applied: ${result.summary.updated} updated, ${result.summary.created} created, ${result.summary.errors} error(s). Field capture ${result.report.totalCoveragePct}%; ${result.report.enrichmentGaps.length} enrichment field(s) still incomplete.`;
+    await finishSyncLog(logId, status, {
+      recordsFound: rows.length, recordsImported: applied, recordsSkipped: result.summary.errors,
+      employeesCreated: result.summary.created, devicesCreated: 0
+    }, message);
+
+    await audit(req, 'ingestion.roster_apply', {
+      entityType: 'employee', entityId: 'roster_smart',
+      summary: message,
+      details: { ...result.summary, capture: { coveragePct: result.report.totalCoveragePct, coreGaps: result.report.coreGaps.length, enrichmentGaps: result.report.enrichmentGaps.length }, recomputed: recompute }
+    });
+    return res.json({ success: true, result: result.summary, report: result.report, recompute, syncLogId: logId });
+  } catch (err) {
+    if (logId) await finishSyncLog(logId, 'FAILED', {}, err.message).catch(() => {});
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// Legacy JSON preview path (kept for the Employees panel / small manual payloads).
 router.post('/roster/preview', async (req, res) => {
   try {
     const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;
@@ -411,29 +584,6 @@ router.post('/roster/preview', async (req, res) => {
     if (rows.length > 5000) return res.status(400).json({ error: 'Too many rows (max 5000)' });
     const result = await roster.analyzeRoster(rows, { apply: false });
     return res.json({ success: true, preview: result });
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-});
-
-router.post('/roster/apply', requirePerm('EMPLOYEES_EDIT'), async (req, res) => {
-  try {
-    const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;
-    if (!rows || !rows.length) return res.status(400).json({ error: 'Provide a non-empty rows array' });
-    if (rows.length > 5000) return res.status(400).json({ error: 'Too many rows (max 5000)' });
-
-    const result = await roster.analyzeRoster(rows, { apply: true });
-    // Shift changes affect derived attendance — rebuild just those employees.
-    let recompute = null;
-    if (result.recomputeEmployeeIds.length) {
-      recompute = await recomputeAttendance({ employeeIds: result.recomputeEmployeeIds });
-    }
-    await audit(req, 'ingestion.roster_apply', {
-      entityType: 'employee', entityId: 'roster_csv',
-      summary: `Roster CSV applied: ${result.summary.updated} updated, ${result.summary.created} created, ${result.summary.errors} error(s)`,
-      details: { ...result.summary, recomputed: recompute }
-    });
-    return res.json({ success: true, result: result.summary, recompute });
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }

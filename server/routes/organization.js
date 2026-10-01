@@ -330,15 +330,21 @@ router.post('/employees', requireAuth, accessGuard, requirePerm('EMPLOYEES_EDIT'
 
     const fullName = [firstName, b.last_name].filter(Boolean).join(' ').trim();
     const id = `emp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    // Every FIELD_SPEC enrichment column is accepted here too, so the manual add form has
+    // parity with the fields the roster importer and prefilled template track (blank -> NULL).
     await db.run(`
       INSERT INTO employees (id, employee_code, biometric_user_id, first_name, last_name, full_name,
         gender, designation, department_id, shift_id, date_of_joining, mobile, email,
-        employment_type, base_ctc, role, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+        employment_type, base_ctc, role, status,
+        card_no, date_of_birth, nationality, city, contact_tel, office_tel, verify_mode, esi_ip)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE',
+        ?, ?, ?, ?, ?, ?, ?, ?)
     `, id, code, bioId || null, firstName, b.last_name || null, fullName,
       b.gender || null, b.designation || null, b.department_id, b.shift_id || null,
       b.date_of_joining || new Date().toISOString().slice(0, 10), b.mobile || null, b.email || null,
-      b.employment_type || 'REGULAR', Number(b.base_ctc) || 0, role);
+      b.employment_type || 'REGULAR', Number(b.base_ctc) || 0, role,
+      b.card_no || null, b.date_of_birth || null, b.nationality || null, b.city || null,
+      b.contact_tel || null, b.office_tel || null, b.verify_mode || 'FINGERPRINT', b.esi_ip || null);
 
     const created = await db.get(`
       SELECT e.*, d.name as department_name, s.name as shift_name
@@ -441,7 +447,8 @@ router.put('/employees/:id', requireAuth, accessGuard, requirePerm('EMPLOYEES_ED
     const {
       role, shift_id, designation, department_id, status,
       first_name, last_name, gender, date_of_joining, mobile, email,
-      employment_type, base_ctc, bank_name, bank_account, bank_ifsc, pan, uan, biometric_user_id
+      employment_type, base_ctc, bank_name, bank_account, bank_ifsc, pan, uan, biometric_user_id,
+      card_no, date_of_birth, nationality, city, contact_tel, office_tel, verify_mode, esi_ip
     } = req.body;
     if (role && !['SUPER_ADMIN', 'ADMIN', 'EMPLOYEE'].includes(role)) {
       return res.status(400).json({ error: "role must be SUPER_ADMIN, ADMIN or EMPLOYEE" });
@@ -491,6 +498,14 @@ router.put('/employees/:id', requireAuth, accessGuard, requirePerm('EMPLOYEES_ED
         bank_ifsc = coalesce(?, bank_ifsc),
         pan = coalesce(?, pan),
         uan = coalesce(?, uan),
+        card_no = coalesce(?, card_no),
+        date_of_birth = coalesce(?, date_of_birth),
+        nationality = coalesce(?, nationality),
+        city = coalesce(?, city),
+        contact_tel = coalesce(?, contact_tel),
+        office_tel = coalesce(?, office_tel),
+        verify_mode = coalesce(?, verify_mode),
+        esi_ip = coalesce(?, esi_ip),
         biometric_user_id = coalesce(?, biometric_user_id),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
@@ -498,6 +513,8 @@ router.put('/employees/:id', requireAuth, accessGuard, requirePerm('EMPLOYEES_ED
       nextFirst, nextLast ?? null, nextFullName, gender ?? null, date_of_joining ?? null,
       mobile ?? null, email ?? null, employment_type ?? null, base_ctc != null ? Number(base_ctc) : null,
       bank_name ?? null, bank_account ?? null, bank_ifsc ?? null, pan ?? null, uan ?? null,
+      card_no ?? null, date_of_birth ?? null, nationality ?? null, city ?? null,
+      contact_tel ?? null, office_tel ?? null, verify_mode ?? null, esi_ip ?? null,
       biometric_user_id != null ? String(biometric_user_id).trim() || null : null, id);
     const changed = diffFields(
       { role: existing.role, shift_id: existing.shift_id, designation: existing.designation, department_id: existing.department_id, status: existing.status, mobile: existing.mobile, email: existing.email },

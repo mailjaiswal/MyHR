@@ -173,15 +173,27 @@ export default function DataSources({ onNavigate }) {
   const [recFrom, setRecFrom] = useState('');
   const [recTo, setRecTo] = useState('');
 
-  // Roster / employee-name CSV upload
+  // Roster / employee-master upload (smart, format-agnostic)
   const [rosterRows, setRosterRows] = useState(null);
   const [rosterName, setRosterName] = useState('');
   const [rosterPreview, setRosterPreview] = useState(null);
   const [rosterBusy, setRosterBusy] = useState(false);
-  // First-time-onboarding guardrail: pending rows waiting for an explicit confirm
+  // Guided roster run: preview (mapping review) → processing (live bar) → done (report) | error
+  const [rosterFile, setRosterFile] = useState(null);
+  const [rosterParse, setRosterParse] = useState(null);      // server /roster/parse payload
+  const [rosterMapping, setRosterMapping] = useState(null);  // editable { fieldKey: columnIndex|null }
+  const [rosterSheet, setRosterSheet] = useState(0);
+  const [rosterStage, setRosterStage] = useState('preview'); // preview | processing | done | error
+  const [rosterRun, setRosterRun] = useState(null);          // { result, report, recompute } on done
+  const [rosterRunError, setRosterRunError] = useState(null);
+  const [rosterProgress, setRosterProgress] = useState(null); // { found, imported }
+  const [rosterElapsed, setRosterElapsed] = useState(0);
+  const [rosterParsing, setRosterParsing] = useState(false);
+  const [rosterModalOpen, setRosterModalOpen] = useState(false);
+  // First-time-onboarding guardrail: pending file waiting for an explicit confirm
   const [rosterGate, setRosterGate] = useState(null);
   const [rosterAck, setRosterAck] = useState(false);
-  // Department / shift labels the roster CSV may use + how many staff already exist
+  // Department / shift labels the roster file may use + how many staff already exist
   const [setup, setSetup] = useState({ departments: [], shifts: [], employeeCount: 0 });
 
   const loadAll = useCallback(() => {
@@ -552,34 +564,90 @@ export default function DataSources({ onNavigate }) {
     return { rows };
   };
 
-  const handleRosterFile = async (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setRosterPreview(null);
-    setRosterName(f.name);
-    try {
-      const parsed = parseDelimited(await f.text());
-      if (!parsed) { notify('That file looks empty', true); setRosterRows(null); return; }
-      if (parsed.error) { notify(parsed.error, true); setRosterRows(null); return; }
-      if (!parsed.rows.length) { notify('No data rows found', true); setRosterRows(null); return; }
-      // Guardrail: bulk upload is meant for first-time onboarding only.
-      if (setup.employeeCount > 0 && !rosterAck) {
-        setRosterGate(parsed.rows);
-        return;
-      }
-      setRosterRows(parsed.rows);
-    } catch (err) {
-      notify(`Could not read CSV: ${err.message}`, true);
-      setRosterRows(null);
-    } finally {
-      if (e.target) e.target.value = '';
-    }
+  // POST the raw file to the server smart-ingest engine (CSV/TSV/XLSX/XLS/ODS).
+  const parseRosterOnServer = async (file, opts = {}) => {
+    const buf = await file.arrayBuffer();
+    const res = await fetch('/api/v1/ingestion/roster/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': file.name, 'X-Options': JSON.stringify(opts) },
+      body: buf
+    });
+    const ct = res.headers.get('content-type') || '';
+    if (!res.ok || !ct.includes('application/json')) throw new Error(`Could not read this file (HTTP ${res.status}).`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Could not read this file');
+    return data.parse;
   };
 
-  const confirmRosterGate = () => {
-    setRosterRows(rosterGate);
-    setRosterAck(true);
-    setRosterGate(null);
+  // Turn the server auto-mapping into an editable { fieldKey: column | null } object.
+  const mappingFromParse = (parse) => {
+    const m = {};
+    for (const [k, v] of Object.entries(parse.mapping)) m[k] = v.column == null ? null : v.column;
+    return m;
+  };
+
+  const openRosterPreview = (parse) => {
+    setRosterParse(parse);
+    setRosterMapping(mappingFromParse(parse));
+    setRosterSheet(parse.sheetIndex);
+    setRosterStage('preview');
+    setRosterRun(null); setRosterRunError(null); setRosterProgress(null); setRosterElapsed(0);
+    setRosterModalOpen(true);
+  };
+
+  const runRosterParse = async (file, opts = {}) => {
+    setRosterParsing(true);
+    try {
+      const parse = await parseRosterOnServer(file, opts);
+      setRosterRows(null);
+      openRosterPreview(parse);
+    } catch (err) {
+      // Fallback: local CSV/TSV reader so a plain text roster still works if the engine route errored.
+      try {
+        const parsed = parseDelimited(await file.text());
+        if (parsed && !parsed.error && parsed.rows.length) {
+          setRosterParse(null); setRosterMapping(null); setRosterStage('preview'); setRosterModalOpen(true);
+          notify('Used the built-in CSV reader (the smart parser was unavailable): ' + err.message, true);
+        } else { notify(`Could not read file: ${err.message}`, true); setRosterFile(null); setRosterName(''); }
+      } catch { notify(`Could not read file: ${err.message}`, true); setRosterFile(null); setRosterName(''); }
+    } finally { setRosterParsing(false); }
+  };
+
+  const handleRosterFile = async (e) => {
+    const f = e.target.files?.[0];
+    if (e.target) e.target.value = '';
+    if (!f) return;
+    setRosterName(f.name); setRosterFile(f);
+    setRosterParse(null); setRosterMapping(null); setRosterRun(null); setRosterRunError(null); setRosterRows(null);
+    setRosterStage('preview');
+    // Guardrail: bulk upload is meant for first-time onboarding only.
+    if (setup.employeeCount > 0 && !rosterAck) { setRosterGate(f); return; }
+    await runRosterParse(f, {});
+  };
+
+  // Re-run the engine when the admin switches sheet or corrects the mapping — the server
+  // rebuilds canonical rows, preview, counts and the capture report identically.
+  const reparseRoster = async (nextMapping, nextSheet) => {
+    if (!rosterFile) return;
+    setRosterParsing(true);
+    try {
+      const opts = { sheetIndex: nextSheet };
+      if (nextMapping) opts.mapping = nextMapping;
+      const parse = await parseRosterOnServer(rosterFile, opts);
+      setRosterParse(parse); setRosterSheet(nextSheet);
+      if (!nextMapping) setRosterMapping(mappingFromParse(parse));
+    } catch (err) { notify(`Re-parse failed: ${err.message}`, true); }
+    finally { setRosterParsing(false); }
+  };
+
+  const changeRosterSheet = (idx) => { setRosterSheet(idx); reparseRoster(rosterMapping, idx); };
+  const setFieldColumn = (fieldKey, col) => setRosterMapping(m => ({ ...m, [fieldKey]: (col === '' || col == null) ? null : Number(col) }));
+  const commitMapping = () => reparseRoster(rosterMapping, rosterSheet);
+
+  const confirmRosterGate = async () => {
+    const f = rosterGate;
+    setRosterAck(true); setRosterGate(null);
+    if (f) await runRosterParse(f, {});
   };
 
   const downloadRosterTemplate = async () => {
@@ -593,48 +661,75 @@ export default function DataSources({ onNavigate }) {
       a.download = 'myHR_Employee_Master_Template.csv';
       a.click();
       URL.revokeObjectURL(a.href);
-      notify('Master template downloaded — fill it in and upload it back');
-    } catch (err) {
-      notify(`Template download failed: ${err.message}`, true);
-    } finally {
-      setBusy(null);
-    }
+      notify('Blank template downloaded — fill it in and upload it back');
+    } catch (err) { notify(`Template download failed: ${err.message}`, true); }
+    finally { setBusy(null); }
   };
 
-  const previewRoster = async () => {
-    if (!rosterRows?.length) { notify('Choose a roster CSV first', true); return; }
-    setRosterBusy(true);
+  // Prepopulated, gap-highlighted Excel of the CURRENT roster (fill amber blanks, re-upload).
+  const downloadRosterPrefilled = async () => {
+    setBusy('TEMPLATE_XLSX');
     try {
-      const res = await fetch('/api/v1/ingestion/roster/preview', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: rosterRows })
-      });
-      const data = await res.json();
-      if (data.success) setRosterPreview(data.preview);
-      else notify(data.error || 'Roster preview failed', true);
-    } catch (err) { notify(`Roster preview failed: ${err.message}`, true); }
-    finally { setRosterBusy(false); }
+      const res = await fetch('/api/v1/ingestion/roster/template.xlsx');
+      if (!res.ok) { notify('Download failed', true); return; }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'myHR_Employee_Master_Prefilled.xlsx';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      notify('Your current data downloaded — complete the amber cells and re-upload it');
+    } catch (err) { notify(`Download failed: ${err.message}`, true); }
+    finally { setBusy(null); }
   };
 
+  // Step 2: apply inside the guided modal (live bar → completion report), like the log flow.
   const applyRoster = async () => {
-    if (!rosterRows?.length) return;
-    setRosterBusy(true);
+    if (!rosterFile && !rosterRows) { notify('Choose an employee file first', true); return; }
+    setRosterStage('processing'); setRosterRunError(null);
+    const t0 = Date.now(); setRosterElapsed(0);
+    const total = rosterParse?.rowsCount || rosterRows?.length || 0;
+    setRosterProgress({ found: total, imported: 0 });
+    const tick = setInterval(() => setRosterElapsed(Date.now() - t0), 100);
+    let pollBusy = false;
+    const poll = setInterval(async () => {
+      if (pollBusy) return; pollBusy = true;
+      try { const r = await fetch('/api/v1/ingestion/progress'); const d = await r.json(); if (d.success && d.progress) setRosterProgress({ found: d.progress.recordsFound, imported: d.progress.recordsImported }); }
+      catch { /* transient */ } finally { pollBusy = false; }
+    }, 1200);
     try {
-      const res = await fetch('/api/v1/ingestion/roster/apply', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: rosterRows })
-      });
+      let res;
+      if (rosterFile && rosterParse) {
+        const buf = await rosterFile.arrayBuffer();
+        res = await fetch('/api/v1/ingestion/roster/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': rosterFile.name, 'X-Source-Name': 'Employee Roster Import', 'X-Options': JSON.stringify({ sheetIndex: rosterSheet, mapping: rosterMapping }) },
+          body: buf
+        });
+      } else {
+        res = await fetch('/api/v1/ingestion/roster/apply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: rosterRows }) });
+      }
+      const ct = res.headers.get('content-type') || '';
+      if (!res.ok || !ct.includes('application/json')) {
+        const hint = res.status >= 500 ? ' The import may have timed out — try a smaller file.' : '';
+        throw new Error(`Import failed (HTTP ${res.status}).${hint}`);
+      }
       const data = await res.json();
       if (data.success) {
-        const s = data.result;
-        setRosterPreview(null);
-        setRosterRows(null);
-        setRosterName('');
-        notify(`Roster applied — ${s.updated} employee(s) updated, ${s.created} created` +
-          (data.recompute ? `, attendance rebuilt for ${data.recompute.employees} employee(s)` : '') +
-          (s.errors ? `, ${s.errors} row(s) skipped` : ''));
+        setRosterRun({ result: data.result, report: data.report, recompute: data.recompute });
+        setRosterProgress({ found: total, imported: total });
+        setRosterStage('done');
         loadAll();
-      } else notify(data.error || 'Roster import failed', true);
-    } catch (err) { notify(`Roster import failed: ${err.message}`, true); }
-    finally { setRosterBusy(false); }
+      } else { setRosterRunError(data.error || 'Roster import failed'); setRosterStage('error'); }
+    } catch (err) { setRosterRunError(err.message || 'Roster import failed'); setRosterStage('error'); }
+    finally { clearInterval(tick); clearInterval(poll); setRosterElapsed(Date.now() - t0); }
+  };
+
+  const closeRosterRun = () => { if (rosterStage === 'processing') return; setRosterStage('preview'); setRosterModalOpen(false); setRosterRun(null); setRosterRunError(null); setRosterProgress(null); };
+
+  const resetRoster = () => {
+    setRosterFile(null); setRosterName(''); setRosterParse(null); setRosterMapping(null); setRosterRows(null);
+    setRosterStage('preview'); setRosterRun(null); setRosterRunError(null); setRosterAck(false); setRosterModalOpen(false);
   };
 
   const card = {
@@ -1044,91 +1139,83 @@ export default function DataSources({ onNavigate }) {
         </div>
       </div>
 
-      {/* Roster / employee-name CSV — attaches real names, department and shift to auto-created "Staff #NN" records */}
+      {/* Employee / Roster Master — smart, format-agnostic employee upload (guided flow) */}
       <div style={card}>
         <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-heading)' }}>
           <IdCard size={16} color="var(--brand-primary-ink)" />
-          Roster / Employee Name CSV
+          Employee / Roster Master
         </div>
         <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
-            Biometric exports only carry numeric user IDs, so unknown staff land up as <strong>Staff #NN</strong>. Upload a small
-            CSV to attach their real names, plus a department / shift / salary — matched on <strong>Biometric ID</strong> (or
-            Employee Code / email). Changing someone's shift automatically rebuilds their attendance.
+            Upload the employee master in <strong>any format</strong> — <strong>Excel (.xlsx / .xls)</strong>, a
+            <strong> Google-Sheets export (.ods / .csv)</strong>, or <strong>TSV</strong> — with any column order and messy
+            headers like “Emp No”, “Card ID”, “Dept.”. The platform auto-detects the format, intelligently maps your columns
+            to the right fields, and shows a full <strong>review + column-mapping</strong> screen before anything is written.
+            Rows are matched on <strong>Biometric ID</strong> (or Employee Code / email); unknown staff are created so their
+            later punches link up, and any field left blank in your file is reported so you can finish it in the Employees tab.
           </p>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             <label style={{
               display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 1rem', borderRadius: '0.5rem',
-              border: `2px dashed ${rosterRows ? 'rgba(16,185,129,0.5)' : 'var(--border-color)'}`,
-              background: rosterRows ? 'rgba(16,185,129,0.06)' : 'transparent',
+              border: `2px dashed ${rosterFile ? 'rgba(16,185,129,0.5)' : 'var(--border-color)'}`,
+              background: rosterFile ? 'rgba(16,185,129,0.06)' : 'transparent',
               fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-heading)', cursor: 'pointer'
             }}>
-              <UploadCloud size={16} color={rosterRows ? 'var(--brand-primary-ink)' : 'var(--text-caption)'} />
-              {rosterName || 'Choose roster .csv file'}
-              <input type="file" accept=".csv,.txt" style={{ display: 'none' }} onChange={handleRosterFile} />
+              <UploadCloud size={16} color={rosterFile ? 'var(--brand-primary-ink)' : 'var(--text-caption)'} />
+              {rosterName || 'Choose employee file (.xlsx, .xls, .ods, .csv, .tsv)'}
+              <input type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.ods" style={{ display: 'none' }} onChange={handleRosterFile} />
             </label>
-            {rosterRows && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{rosterRows.length} row(s) read</span>}
-            {rosterRows && (
-              <button
-                className="btn-swaniki"
-                onClick={() => { setRosterRows(null); setRosterName(''); setRosterPreview(null); }}
-                style={{ ...miniBtn, color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}
-              >
+            {rosterParsing && <span style={{ fontSize: '0.72rem', color: 'var(--brand-primary-ink)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}><Loader2 size={13} className="spin" /> Smart-analyzing file…</span>}
+            {rosterParse && !rosterParsing && (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                <strong style={{ color: 'var(--brand-primary-ink)' }}>{rosterParse.rowsCount}</strong> employee row(s) detected · format <strong>{String(rosterParse.detectedFormat).toUpperCase()}</strong>
+              </span>
+            )}
+            {rosterRows && !rosterParse && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{rosterRows.length} row(s) read</span>}
+            {rosterFile && (
+              <button className="btn-swaniki" onClick={resetRoster} style={{ ...miniBtn, color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
                 <X size={13} /> Clear
               </button>
             )}
-            {canEdit && (
+          </div>
+
+          {canEdit && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <button
+                className="btn-swaniki"
+                onClick={() => (rosterParse || rosterRows) ? setRosterModalOpen(true) : (rosterFile && runRosterParse(rosterFile, {}))}
+                disabled={rosterParsing || !rosterFile}
+                style={{
+                  padding: '0.55rem 1.1rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem',
+                  cursor: !rosterFile || rosterParsing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                  background: 'var(--brand-primary)', color: 'var(--on-primary)', opacity: !rosterFile || rosterParsing ? 0.5 : 1
+                }}
+              >
+                {rosterParsing ? <Loader2 size={15} className="spin" /> : <Eye size={15} />}
+                {rosterParsing ? 'Analyzing…' : (rosterParse || rosterRows) ? 'Review & Import' : 'Analyze file'}
+              </button>
+              <button className="island-btn" onClick={downloadRosterPrefilled} disabled={busy === 'TEMPLATE_XLSX'}>
+                <span className="icon-orb">{busy === 'TEMPLATE_XLSX' ? <Loader2 size={13} className="spin" /> : <Download size={13} />}</span>
+                Download my current data (.xlsx)
+              </button>
               <button className="island-btn" onClick={downloadRosterTemplate} disabled={busy === 'TEMPLATE'}>
                 <span className="icon-orb">{busy === 'TEMPLATE' ? <Loader2 size={13} className="spin" /> : <Download size={13} />}</span>
-                Master template
+                Blank template
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           {canEdit && setup.employeeCount > 0 && (
             <p style={{ fontSize: '0.72rem', color: 'var(--warning-ink)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <TriangleAlert size={13} /> {setup.employeeCount} employee(s) already on file — bulk upload is for first-time
-              onboarding; add or edit individual staff in the Employees panel.
+              <TriangleAlert size={13} /> {setup.employeeCount} employee(s) already on file — rows that match update safely
+              (blank cells never overwrite existing data). For one-off changes use the Employees panel.
             </p>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-            <button
-              className="btn-swaniki"
-              onClick={previewRoster}
-              disabled={rosterBusy || !rosterRows}
-              style={{
-                padding: '0.55rem 1.1rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem',
-                cursor: !rosterRows || rosterBusy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
-                background: 'var(--brand-primary)',
-                color: 'var(--on-primary)', opacity: !rosterRows || rosterBusy ? 0.5 : 1
-              }}
-            >
-              {rosterBusy ? <Loader2 size={15} className="spin" /> : <Eye size={15} />}
-              {rosterBusy ? 'Checking…' : 'Preview roster match'}
-            </button>
-            {canEditEmployees && rosterRows && (
-              <button
-                className="btn-swaniki"
-                onClick={applyRoster}
-                disabled={rosterBusy}
-                style={{
-                  padding: '0.55rem 1.1rem', fontSize: '0.8125rem', fontWeight: 700, borderRadius: '0.5rem',
-                  cursor: rosterBusy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
-                  background: 'rgba(16,185,129,0.14)', color: 'var(--brand-primary-ink)', opacity: rosterBusy ? 0.6 : 1,
-                  border: '1px solid rgba(16,185,129,0.35)'
-                }}
-              >
-                {rosterBusy ? <Loader2 size={15} className="spin" /> : <CheckCircle2 size={15} />}
-                Apply without preview
-              </button>
-            )}
-          </div>
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-              Expected headers (any order): Biometric ID / PIN, Name, Designation, Department, Shift, Email, Mobile, Base CTC, DOJ, Gender
+              Recognized fields (any order, auto-mapped): Biometric ID / PIN, Employee Code, Name, Gender, DOB, Mobile, Email, Designation, Department, Shift, DOJ, Base CTC, Card No, UAN, ESI, PAN, Bank / Account / IFSC, Employment Type, Verify Mode, Status
             </span>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-caption)' }}>Departments</span>
@@ -1143,7 +1230,7 @@ export default function DataSources({ onNavigate }) {
               ))}
             </div>
             <span style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }}>
-              Department / shift matching is forgiving — “Nursing” lands on “Nursing &amp; Care”, “Night” on “Night (19:00 - 07:00)”. Unmatched names are flagged in the preview and left unchanged.
+              Department / shift matching is forgiving — “Nursing” lands on “Nursing &amp; Care”, “Night” on “Night (19:00 - 07:00)”. Unmatched names are flagged and left unchanged.
             </span>
           </div>
         </div>
@@ -1331,7 +1418,7 @@ export default function DataSources({ onNavigate }) {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                 <button className="island-btn" onClick={() => { setRosterGate(null); setRosterName(''); }}>Cancel</button>
                 <button className="island-btn is-active" onClick={confirmRosterGate}>
-                  <UploadCloud size={13} /> Continue with {rosterGate.length} row{rosterGate.length === 1 ? '' : 's'}
+                  <UploadCloud size={13} /> Continue with “{rosterGate.name}”
                 </button>
               </div>
             </div>
@@ -1339,13 +1426,27 @@ export default function DataSources({ onNavigate }) {
         </div>
       )}
 
-      {rosterPreview && (
-        <RosterPreviewModal
-          preview={rosterPreview}
-          busy={rosterBusy}
+      {rosterModalOpen && (rosterParse || rosterRows) && (
+        <RosterIngestModal
+          stage={rosterStage}
+          parse={rosterParse}
+          localRows={rosterRows}
+          mapping={rosterMapping}
+          sheet={rosterSheet}
+          run={rosterRun}
+          runError={rosterRunError}
+          progress={rosterProgress}
+          elapsedMs={rosterElapsed}
+          parsing={rosterParsing}
           canApply={canEditEmployees}
-          onClose={() => { if (!rosterBusy) setRosterPreview(null); }}
+          onSheetChange={changeRosterSheet}
+          onFieldColumnChange={setFieldColumn}
+          onCommitMapping={commitMapping}
           onApply={applyRoster}
+          onClose={closeRosterRun}
+          onFinish={resetRoster}
+          onNavigate={onNavigate}
+          onDownloadPrefilled={downloadRosterPrefilled}
         />
       )}
     </div>
@@ -1414,6 +1515,280 @@ function actionTone(status) {
   if (s.startsWith('update')) return 'green';
   if (s.startsWith('new')) return 'amber';
   return 'slate';
+}
+
+// Guided employee-master flow: mapping review → processing (live bar) → done (capture report
+// + "please finish missing details" + jump to Employees / download prefilled master).
+const ROSTER_SHOW_COLS = [
+  ['fullName', 'Name'], ['biometricUserId', 'Bio ID'], ['employeeCode', 'Code'],
+  ['department', 'Dept'], ['shift', 'Shift'], ['designation', 'Designation'],
+  ['dateOfJoining', 'DOJ'], ['baseCtc', 'CTC'], ['email', 'Email'], ['mobile', 'Mobile']
+];
+const humanizeKey = (k) => String(k).replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, c => c.toUpperCase());
+
+function RosterIngestModal({ stage, parse, localRows, mapping, sheet, run, runError, progress, elapsedMs, parsing, canApply, onSheetChange, onFieldColumnChange, onCommitMapping, onApply, onClose, onFinish, onNavigate, onDownloadPrefilled }) {
+  const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 'var(--z-modal)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' };
+  const cardBase = { width: 'min(1100px, 100%)', maxHeight: '92dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: '1rem', overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' };
+  const headBg = 'var(--bg-surface-subtle)';
+  const primaryBtn = (extra = {}) => ({ background: 'var(--brand-primary)', color: 'var(--on-primary)', padding: '0.55rem 1.4rem', fontSize: '0.8125rem', fontWeight: 700, border: 'none', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.45rem', ...extra });
+  const ghostBtn = { background: 'transparent', color: 'var(--text-muted)', padding: '0.5rem 1rem', fontSize: '0.8125rem', fontWeight: 600, border: '1px solid var(--border-color)', borderRadius: '0.5rem', cursor: 'pointer' };
+  const CONF_TONE = { high: 'green', medium: 'amber', low: 'red', manual: 'green', none: 'slate' };
+  const closeFn = stage === 'done' ? onFinish : onClose;
+  useEscapeClose(stage !== 'processing', closeFn);
+
+  const fields = parse?.fields || [];
+  const labelOf = (k) => (fields.find(f => f.key === k) || {}).label || humanizeKey(k);
+  const report = stage === 'done' ? (run?.report || null) : (parse?.report || null);
+  const rowsForTable = parse ? parse.previewRows : (localRows || []).slice(0, 200);
+
+  // ── PROCESSING / DONE / ERROR panels (pinned header + scroll body + pinned footer) ──
+  if (stage !== 'preview') {
+    const total = parse ? parse.rowsCount : (localRows?.length || 0);
+    const imported = progress?.imported ?? 0;
+    const found = (progress?.found ?? total) || 0;
+    const pct = found > 0 ? Math.min(100, Math.round((imported / found) * 100)) : 0;
+    const result = run?.result || {};
+    const rStatusColor = result.errors ? 'var(--warning-ink)' : 'var(--brand-primary-ink)';
+    return (
+      <div onClick={stage === 'processing' ? undefined : closeFn} style={overlay}>
+        <div onClick={e => e.stopPropagation()} style={{ ...cardBase, width: 'min(760px, 100%)' }}>
+          {stage === 'processing' && (
+            <div style={{ padding: '2.25rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.15rem', textAlign: 'center' }}>
+              <Loader2 size={38} className="spin" style={{ color: 'var(--brand-primary-ink)' }} />
+              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-heading)' }}>Importing your employees…</h2>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '0.4rem' }}>
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: '2.6rem', fontWeight: 800, color: 'var(--brand-primary-ink)', lineHeight: 1 }}>{imported.toLocaleString('en-IN')}</span>
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-muted)' }}>/ {found.toLocaleString('en-IN')}</span>
+                <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--text-caption)', textTransform: 'uppercase', letterSpacing: '0.08em', marginLeft: '0.3rem' }}>rows</span>
+              </div>
+              <div style={{ width: '100%', maxWidth: '30rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <div style={{ width: '100%', height: '0.7rem', background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.max(pct, imported > 0 ? pct : 5)}%`, background: 'linear-gradient(90deg, var(--brand-primary), var(--brand-primary-ink))', borderRadius: '9999px', transition: 'width 0.35s cubic-bezier(0.22,1,0.36,1)' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  <span style={{ fontWeight: 700, color: 'var(--brand-primary-ink)' }}>{pct}% processed</span>
+                  <span className="mono">{formatDuration(elapsedMs)}</span>
+                </div>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: '30rem' }}>Matching, creating and updating employee records. Please keep this window open.</p>
+            </div>
+          )}
+
+          {stage === 'done' && (
+            <>
+              <div style={{ position: 'relative', flexShrink: 0, padding: '1.6rem 1.75rem 0.9rem', textAlign: 'center', background: 'rgba(16,185,129,0.07)', borderBottom: '1px solid var(--border-color)' }}>
+                <button onClick={closeFn} aria-label="Close" style={{ position: 'absolute', top: '0.7rem', right: '0.85rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem', lineHeight: 0 }}><X size={20} /></button>
+                <CheckCircle2 size={38} style={{ color: rStatusColor }} />
+                <h2 style={{ margin: '0.5rem 0 0.15rem', fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-heading)' }}>Employee import complete</h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{parse?.fileName || 'Roster file'} · finished in <strong style={{ color: rStatusColor }}>{formatDuration(elapsedMs)}</strong></div>
+              </div>
+              <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ flexShrink: 0, padding: '1.1rem 1.75rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.9rem', borderBottom: '1px solid var(--border-color)' }}>
+                  {[['Updated', result.updated || 0, 'var(--brand-primary-ink)'], ['Created', result.created || 0, 'var(--warning-ink)'], ['Errors', result.errors || 0, result.errors ? 'var(--danger-ink)' : 'var(--text-muted)'], ['Field capture', report ? `${report.totalCoveragePct}%` : '—', 'var(--text-heading)']].map(([l, v, c]) => (
+                    <div key={l} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                      <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-caption)' }}>{l}</span>
+                      <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', fontWeight: 700, color: c, lineHeight: 1 }}>{typeof v === 'number' ? v.toLocaleString('en-IN') : v}</span>
+                    </div>
+                  ))}
+                </div>
+                {run?.recompute ? <div style={{ padding: '0.7rem 1.75rem', fontSize: '0.75rem', color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)' }}>Attendance rebuilt for {run.recompute.employees} employee(s) whose shift changed.</div> : null}
+                {report && (
+                  <div style={{ padding: '1rem 1.75rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--brand-primary-ink)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}><CheckCircle2 size={14} /> Information captured</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        {Object.entries(report.coverage).filter(([, n]) => n > 0).map(([k, n]) => (
+                          <span key={k} style={{ fontSize: '0.6875rem', padding: '0.15rem 0.5rem', borderRadius: '9999px', background: 'rgba(16,185,129,0.12)', color: 'var(--brand-primary-ink)', border: '1px solid rgba(4,120,87,0.28)' }}>{labelOf(k)} · {n}/{report.total}</span>
+                        ))}
+                        {Object.values(report.coverage).every(n => n === 0) && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>No optional fields were present in the file.</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--warning-ink)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}><TriangleAlert size={14} /> Details not captured</div>
+                      {(() => {
+                        const gaps = [...(report.coreGaps || []), ...(report.enrichmentGaps || [])];
+                        if (!gaps.length) return <span style={{ fontSize: '0.75rem', color: 'var(--brand-primary-ink)' }}>Every tracked field was filled for all rows. 🎉</span>;
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                            {gaps.slice(0, 24).map(g => (
+                              <div key={g.key} style={{ fontSize: '0.72rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'baseline' }}>
+                                <span style={{ fontWeight: 700, color: 'var(--text-heading)', minWidth: '9rem' }}>{g.label}</span>
+                                <span style={{ color: 'var(--warning-ink)' }}>{g.missingCount} missing</span>
+                                {g.sampleMissing?.length ? <span style={{ color: 'var(--text-caption)' }}>(e.g. {g.sampleMissing.slice(0, 5).join(', ')}{g.sampleMissing.length > 5 ? ' …' : ''})</span> : null}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    <div style={{ padding: '0.85rem 1rem', borderRadius: '0.6rem', background: 'rgba(180,83,9,0.08)', border: '1px solid rgba(180,83,9,0.26)', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-body)', lineHeight: 1.5 }}>Please <strong>update the missing details manually</strong> in the Employees tab, or download your current data (blanks highlighted) and re-upload it once completed.</span>
+                      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                        {typeof onNavigate === 'function' && (
+                          <button className="btn-swaniki" onClick={() => { onNavigate('employees'); closeFn(); }} style={primaryBtn()}><IdCard size={15} /> Go to Employees</button>
+                        )}
+                        <button className="btn-swaniki" onClick={onDownloadPrefilled} style={{ ...ghostBtn, color: 'var(--brand-primary-ink)', borderColor: 'rgba(4,120,87,0.3)' }}><Download size={15} /> Download current data (.xlsx)</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div style={{ flexShrink: 0, padding: '1rem 1.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', background: headBg }}>
+                <button className="btn-swaniki" onClick={closeFn} style={primaryBtn()}>Close</button>
+              </div>
+            </>
+          )}
+
+          {stage === 'error' && (
+            <>
+              <div style={{ position: 'relative', flexShrink: 0, padding: '1.8rem 1.75rem 1rem', textAlign: 'center', background: 'rgba(185,28,28,0.08)', borderBottom: '1px solid var(--border-color)' }}>
+                <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: '0.7rem', right: '0.85rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem', lineHeight: 0 }}><X size={20} /></button>
+                <XCircle size={38} style={{ color: 'var(--danger-ink)' }} />
+                <h2 style={{ margin: '0.5rem 0 0.15rem', fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-heading)' }}>Employee import failed</h2>
+              </div>
+              <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '1.2rem 1.75rem', fontSize: '0.85rem', color: 'var(--danger-ink)', lineHeight: 1.6 }}>{runError || 'Something went wrong while importing this file.'}</div>
+              <div style={{ flexShrink: 0, padding: '1rem 1.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', background: headBg }}>
+                <button className="btn-swaniki" onClick={onClose} style={ghostBtn}>Back to review</button>
+                <button className="btn-swaniki" onClick={onApply} style={primaryBtn()}><RefreshCw size={15} /> Try again</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── PREVIEW stage: sheet picker + editable column mapping + row preview + capture summary ──
+  const stats = parse ? [
+    { label: 'Rows detected', value: parse.rowsCount, color: 'var(--text-heading)' },
+    { label: 'Will update', value: parse.summary.willUpdate, color: 'var(--brand-primary-ink)' },
+    { label: 'Will create', value: parse.summary.willCreate, color: 'var(--warning-ink)' },
+    { label: 'Keyless / errors', value: parse.summary.errors, color: parse.summary.errors ? 'var(--danger-ink)' : 'var(--text-muted)' }
+  ] : [{ label: 'Rows (basic reader)', value: localRows.length, color: 'var(--text-heading)' }];
+
+  const selStyle = { width: '100%', background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-color)', borderRadius: '0.4rem', padding: '0.3rem 0.4rem', fontSize: '0.72rem', color: 'var(--text-heading)' };
+
+  return (
+    <div onClick={onClose} style={overlay}>
+      <div onClick={e => e.stopPropagation()} style={cardBase}>
+        <div style={{ padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+              <span className="pill-badge pill-indigo" style={{ fontSize: '0.62rem' }}>EMPLOYEE MASTER · {String(parse?.detectedFormat || 'CSV').toUpperCase()}</span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Review mapping &amp; rows · nothing has been written yet</span>
+            </div>
+            <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-heading)' }}>{parse?.fileName || 'Roster preview'}</h2>
+          </div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={20} /></button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', padding: '1rem 1.4rem', borderBottom: '1px solid var(--border-color)' }}>
+          {stats.map(s => (
+            <div key={s.label} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-caption)' }}>{s.label}</span>
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.35rem', fontWeight: 600, color: s.color, lineHeight: 1 }}>{Number(s.value || 0).toLocaleString('en-IN')}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: '0.9rem 1.4rem', overflow: 'hidden', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+          {/* Sheet picker (multi-sheet workbooks) */}
+          {parse && parse.sheetNames && parse.sheetNames.length > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-caption)' }}>Sheet</span>
+              <select value={sheet} onChange={e => onSheetChange(Number(e.target.value))} style={{ ...selStyle, width: 'auto', minWidth: '12rem' }}>
+                {parse.sheetNames.map((n, i) => <option key={i} value={i}>{n}{i === parse.sheetIndex ? ' (best guess)' : ''}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Editable column mapping review */}
+          {parse && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-heading)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}><Table2 size={14} /> Column mapping {parsing && <Loader2 size={12} className="spin" style={{ color: 'var(--brand-primary-ink)' }} />}</span>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-caption)' }}>Adjust any mismatched column, then <strong>Re-analyze</strong></span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '0.4rem', maxHeight: '20dvh', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '0.55rem', padding: '0.5rem' }}>
+                {fields.map(f => {
+                  const col = mapping?.[f.key];
+                  const conf = parse.mapping[f.key]?.confidence;
+                  return (
+                    <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                      <span style={{ fontSize: '0.66rem', fontWeight: 700, color: 'var(--text-caption)' }}>
+                        {f.label}{f.required && <span style={{ color: 'var(--danger-ink)' }}> *</span>}{f.group === 'enrichment' ? ' ·opt' : ''}
+                      </span>
+                      <select value={col == null ? '' : col} onChange={e => onFieldColumnChange(f.key, e.target.value)} style={selStyle}>
+                        <option value="">— not mapped —</option>
+                        {parse.columns.map(c => <option key={c.index} value={c.index}>{c.header || `(blank col ${c.index + 1})`}</option>)}
+                      </select>
+                      {col != null && <span style={{ fontSize: '0.6rem', color: ACTION_TONE[CONF_TONE[conf]]?.color || 'var(--text-muted)' }}>{conf}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+              {parse.unmappedColumns?.length > 0 && (
+                <div style={{ marginTop: '0.45rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.66rem', fontWeight: 700, color: 'var(--text-caption)' }}>Ignored columns:</span>
+                  {parse.unmappedColumns.map(c => <code key={c.index} className="mono" style={{ fontSize: '0.66rem', padding: '0.05rem 0.4rem', borderRadius: '0.35rem', background: 'rgba(100,116,139,0.14)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>{c.header}</code>)}
+                </div>
+              )}
+              <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="island-btn" onClick={onCommitMapping} disabled={parsing}><RefreshCw size={13} /> Re-analyze with this mapping</button>
+              </div>
+            </div>
+          )}
+
+          {/* Warnings */}
+          {parse?.warnings?.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+              {parse.warnings.map((w, i) => (
+                <span key={i} style={{ fontSize: '0.7rem', color: 'var(--warning-ink)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}><TriangleAlert size={12} /> {w.message}</span>
+              ))}
+            </div>
+          )}
+
+          {/* Row preview */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', minHeight: 0 }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-caption)' }}>Detected rows ({rowsForTable.length ? rowsForTable.length : 0} shown)</span>
+            <div style={{ overflow: 'auto', maxHeight: '22dvh', border: '1px solid var(--border-color)', borderRadius: '0.6rem' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem' }}>
+                <thead style={{ position: 'sticky', top: 0, background: headBg, zIndex: 1 }}>
+                  <tr>
+                    <th style={{ textAlign: 'left', padding: '0.45rem 0.7rem', color: 'var(--text-caption)', fontWeight: 700, fontSize: '0.6rem' }}>#</th>
+                    {ROSTER_SHOW_COLS.map(([, lbl]) => <th key={lbl} style={{ textAlign: 'left', padding: '0.45rem 0.7rem', color: 'var(--text-caption)', fontWeight: 700, fontSize: '0.6rem', whiteSpace: 'nowrap' }}>{lbl}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rowsForTable.map((row, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '0.35rem 0.7rem', color: 'var(--text-caption)' }}>{i + 1}</td>
+                      {ROSTER_SHOW_COLS.map(([k]) => (
+                        <td key={k} style={{ padding: '0.35rem 0.7rem', color: row[k] ? 'var(--text-body)' : 'var(--text-caption)', whiteSpace: 'nowrap' }}>{row[k] ? String(row[k]) : '·'}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: '1rem 1.4rem', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem', background: headBg }}>
+          <span style={{ marginRight: 'auto', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+            {canApply ? `Importing updates ${parse ? parse.summary.willUpdate : 'matching'} and creates ${parse ? parse.summary.willCreate : 'new'} record(s). Changed shifts rebuild attendance.` : 'You need employee-edit permission to import.'}
+          </span>
+          <button className="btn-swaniki" onClick={onClose} style={ghostBtn}>Cancel</button>
+          {canApply && (
+            <button className="btn-swaniki" onClick={onApply} disabled={parsing} style={primaryBtn({ opacity: parsing ? 0.6 : 1, cursor: parsing ? 'not-allowed' : 'pointer' })}>
+              {parsing ? <Loader2 size={15} className="spin" /> : <CheckCircle2 size={15} />}
+              Confirm &amp; Import
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Server-classified roster preview: which employees will be updated / created / rejected.

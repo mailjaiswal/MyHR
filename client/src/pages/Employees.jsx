@@ -22,9 +22,17 @@ const TABS = [
   { key: 'leaves', label: 'Leaves', Icon: Plane }
 ];
 
+const VERIFY_MODES = ['FINGERPRINT', 'FACE', 'CARD', 'PASSWORD'];
+const EMPLOYMENT_TYPES = ['REGULAR', 'PROBATION', 'CONTRACT', 'INTERN'];
+
+// The Add/Edit form carries every field the smart roster importer + prefilled template track,
+// so any "details not captured" gap an admin is pointed to can be finished here one-by-one.
 const emptyForm = () => ({
   first_name: '', last_name: '', gender: 'Other', department_id: '', designation: '',
-  shift_id: '', date_of_joining: '', mobile: '', email: '', biometric_user_id: ''
+  shift_id: '', date_of_joining: '', date_of_birth: '', mobile: '', email: '', biometric_user_id: '',
+  employment_type: 'REGULAR', base_ctc: '', card_no: '', verify_mode: 'FINGERPRINT',
+  nationality: '', city: '', contact_tel: '', office_tel: '',
+  uan: '', esi_ip: '', pan: '', bank_name: '', bank_account: '', bank_ifsc: ''
 });
 
 function formFromEmployee(e) {
@@ -32,8 +40,21 @@ function formFromEmployee(e) {
     first_name: e.first_name || '', last_name: e.last_name || '', gender: e.gender || 'Other',
     department_id: e.department_id || '', designation: e.designation || '', shift_id: e.shift_id || '',
     date_of_joining: e.date_of_joining ? String(e.date_of_joining).slice(0, 10) : '',
-    mobile: e.mobile || '', email: e.email || '', biometric_user_id: e.biometric_user_id || ''
+    date_of_birth: e.date_of_birth ? String(e.date_of_birth).slice(0, 10) : '',
+    mobile: e.mobile || '', email: e.email || '', biometric_user_id: e.biometric_user_id || '',
+    employment_type: e.employment_type || 'REGULAR', base_ctc: e.base_ctc != null ? String(e.base_ctc) : '',
+    card_no: e.card_no || '', verify_mode: e.verify_mode || 'FINGERPRINT',
+    nationality: e.nationality || '', city: e.city || '', contact_tel: e.contact_tel || '', office_tel: e.office_tel || '',
+    uan: e.uan || '', esi_ip: e.esi_ip || '', pan: e.pan || '',
+    bank_name: e.bank_name || '', bank_account: e.bank_account || '', bank_ifsc: e.bank_ifsc || ''
   };
+}
+
+// Fields the roster importer reports as "often not captured" — a compact per-row gap
+// count so the admin can see, at a glance, who still needs details finished manually.
+const GAP_FIELDS = ['date_of_birth', 'card_no', 'nationality', 'city', 'contact_tel', 'office_tel', 'uan', 'esi_ip', 'pan', 'bank_account'];
+function missingDetailCount(e) {
+  return GAP_FIELDS.reduce((n, k) => n + ((e[k] == null || String(e[k]).trim() === '') ? 1 : 0), 0);
 }
 
 function AttendanceStats({ a }) {
@@ -97,6 +118,12 @@ function EmployeeFormModal({ mode, form, setForm, departments, shifts, busy, idE
     </div>
   );
 
+  const divider = (text) => (
+    <div style={{ gridColumn: '1 / -1', marginTop: '0.35rem', paddingBottom: '0.35rem', borderBottom: '1px solid var(--border-color)', fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-caption)' }}>
+      {text}
+    </div>
+  );
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" style={{ width: '100%', maxWidth: '34rem', padding: 0 }} onClick={e => e.stopPropagation()}>
@@ -107,7 +134,7 @@ function EmployeeFormModal({ mode, form, setForm, departments, shifts, busy, idE
           </div>
           <button className="icon-btn" onClick={onClose}><X size={17} /></button>
         </div>
-        <div style={{ padding: '1.125rem 1.25rem 1.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.875rem' }}>
+        <div style={{ padding: '1.125rem 1.25rem 1.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.875rem', overflowY: 'auto', maxHeight: 'calc(92dvh - 9rem)' }}>
           {field('First name *', <input className="input" value={form.first_name} onChange={e => onChangeField('first_name', e.target.value)} placeholder="Anita" />)}
           {field('Last name', <input className="input" value={form.last_name} onChange={e => onChangeField('last_name', e.target.value)} placeholder="Sharma" />)}
           {field('Gender', (
@@ -136,6 +163,33 @@ function EmployeeFormModal({ mode, form, setForm, departments, shifts, busy, idE
             <input className="input mono" value={form.biometric_user_id} onChange={e => onChangeField('biometric_user_id', e.target.value)} onBlur={() => onChangeField('biometric_user_id', form.biometric_user_id, true)} placeholder="device user id" />,
             'Optional — must be unique on the device'
           )}
+          {field('Access card no', <input className="input mono" value={form.card_no} onChange={e => onChangeField('card_no', e.target.value)} placeholder="RCF / proximity card" />)}
+          {field('Verify mode', (
+            <select className="input" value={form.verify_mode} onChange={e => onChangeField('verify_mode', e.target.value)}>
+              {VERIFY_MODES.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+          ))}
+
+          {divider('Employment & payroll')}
+          {field('Employment type', (
+            <select className="input" value={form.employment_type} onChange={e => onChangeField('employment_type', e.target.value)}>
+              {EMPLOYMENT_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+          ))}
+          {field('Date of birth', <input type="date" className="input" value={form.date_of_birth} onChange={e => onChangeField('date_of_birth', e.target.value)} />)}
+          {field('Base CTC (₹)', <input type="number" min="0" className="input" value={form.base_ctc} onChange={e => onChangeField('base_ctc', e.target.value)} placeholder="18000" />)}
+          {field('PAN', <input className="input mono" value={form.pan} onChange={e => onChangeField('pan', e.target.value)} placeholder="ABCDE1234F" style={{ textTransform: 'uppercase' }} />)}
+          {field('UAN (EPF)', <input className="input mono" value={form.uan} onChange={e => onChangeField('uan', e.target.value)} placeholder="100xxxxxxxxx" />)}
+          {field('ESI IP', <input className="input mono" value={form.esi_ip} onChange={e => onChangeField('esi_ip', e.target.value)} />)}
+          {field('Bank name', <input className="input" value={form.bank_name} onChange={e => onChangeField('bank_name', e.target.value)} placeholder="State Bank of India" />)}
+          {field('Bank account', <input className="input mono" value={form.bank_account} onChange={e => onChangeField('bank_account', e.target.value)} />)}
+          {field('Bank IFSC', <input className="input mono" value={form.bank_ifsc} onChange={e => onChangeField('bank_ifsc', e.target.value)} placeholder="SBIN0000354" style={{ textTransform: 'uppercase' }} />)}
+
+          {divider('Contact & location')}
+          {field('Nationality', <input className="input" value={form.nationality} onChange={e => onChangeField('nationality', e.target.value)} placeholder="Indian" />)}
+          {field('City', <input className="input" value={form.city} onChange={e => onChangeField('city', e.target.value)} />)}
+          {field('Contact tel (home)', <input className="input" value={form.contact_tel} onChange={e => onChangeField('contact_tel', e.target.value)} />)}
+          {field('Office tel', <input className="input" value={form.office_tel} onChange={e => onChangeField('office_tel', e.target.value)} />)}
           {idError && (
             <div className="field-error" style={{ gridColumn: '1 / -1' }}>
               <TriangleAlert size={13} style={{ flex: 'none', marginTop: 1 }} />
@@ -266,9 +320,12 @@ export default function Employees() {
     if (!(await checkBio(form.biometric_user_id))) return;
     setSaving(true);
     try {
-      const body = { ...form };
-      if (!body.date_of_joining) delete body.date_of_joining;
-      if (!body.shift_id) body.shift_id = null;
+      // Normalize blank inputs to null: on create the column falls back to its default,
+      // on edit coalesce(?, col) leaves the stored value untouched (never blank it, and
+      // never send '' into a DATE/REAL column).
+      const body = {};
+      for (const [k, v] of Object.entries(form)) body[k] = (typeof v === 'string' && v.trim() === '') ? null : v;
+      if (body.date_of_joining == null) delete body.date_of_joining;
       const d = formMode === 'create'
         ? await api('/api/v1/organization/employees', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         : await api(`/api/v1/organization/employees/${selectedId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -370,6 +427,7 @@ export default function Employees() {
               <tbody>
                 {employees.map((e, i) => {
                   const inactive = e.status !== 'ACTIVE';
+                  const gaps = missingDetailCount(e);
                   return (
                     <tr
                       key={e.id}
@@ -385,6 +443,15 @@ export default function Employees() {
                             <div className="mono" style={{ fontSize: '0.6563rem', color: 'var(--text-caption)' }}>
                               {e.employee_code}{e.biometric_user_id ? ` · ${e.biometric_user_id}` : ''}
                             </div>
+                            {canEdit && gaps > 0 && (
+                              <button
+                                onClick={(ev) => { ev.stopPropagation(); openEdit(e); }}
+                                title={`${gaps} detail(s) not captured — click to complete`}
+                                style={{ marginTop: '0.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: 'rgba(180,83,9,0.10)', color: 'var(--warning-ink)', border: '1px solid rgba(180,83,9,0.26)', borderRadius: '9999px', padding: '0.05rem 0.45rem', fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}
+                              >
+                                <TriangleAlert size={10} /> {gaps} to fill
+                              </button>
+                            )}
                           </div>
                         </div>
                       </td>
