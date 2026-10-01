@@ -52,19 +52,29 @@ function DayHandlingSummary({ summary, compact = false, onNavigate }) {
   const fmtDay = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
   const fmtTime = (iso) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '—';
   const days = compact && !showAll ? summary.days.slice(0, 5) : summary.days;
+  const num = (n) => (Number(n) || 0).toLocaleString('en-IN');
+  // One scannable metric cell: emphasised number + label + muted caption.
+  const cell = (label, value, caption, color = 'var(--text-heading)') => (
+    <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', padding: '0.55rem 0.65rem', background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-color)', borderRadius: '0.55rem' }}>
+      <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.35rem', fontWeight: 700, color, lineHeight: 1, letterSpacing: '-0.02em' }}>{num(value)}</span>
+      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-heading)' }}>{label}</span>
+      {caption && <span style={{ fontSize: '0.66rem', color: 'var(--text-caption)', lineHeight: 1.35 }}>{caption}</span>}
+    </div>
+  );
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, color: 'var(--text-heading)' }}>
         <CalendarRange size={14} /> Days handled <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>({t.daysTouched} date{t.daysTouched === 1 ? '' : 's'} · {t.staffDayRecords || 0} staff-day{t.staffDayRecords === 1 ? '' : 's'})</span>
       </div>
-      <div style={{ lineHeight: 1.55 }}>
-        <strong>{t.mergedDays}</strong> had new punches merged in (delta added) •
-        <strong>{t.duplicateOnlyDays}</strong> unchanged (pure duplicate overlap — nothing overwritten)
-        {t.protectedDays > 0 && <> • <strong>{t.protectedDays}</strong> regularized left protected</>}
-        {t.openDays > 0 && <> • <strong style={{ color: 'var(--warning-ink)' }}>{t.openDays}</strong> still open (awaiting OUT — completes on next batch)</>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.5rem' }}>
+        {cell('New punches merged', t.mergedDays, 'days that gained fresh punches (delta added)', t.mergedDays > 0 ? 'var(--brand-primary-ink)' : 'var(--text-muted)')}
+        {cell('Unchanged days', t.duplicateOnlyDays, 'pure duplicate overlap — nothing overwritten', 'var(--text-muted)')}
+        {cell('Protected days', t.protectedDays, 'regularized left untouched', t.protectedDays > 0 ? 'var(--text-heading)' : 'var(--text-muted)')}
+        {cell('Open days', t.openDays, 'awaiting OUT — completes on next batch', t.openDays > 0 ? 'var(--warning-ink)' : 'var(--text-muted)')}
       </div>
-      <div style={{ color: 'var(--text-muted)' }}>
-        {t.newPunches} new punch(es) inserted • {t.duplicatePunches} already-known punch(es) deduplicated
+      <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.75rem', color: 'var(--text-muted)', padding: '0.1rem 0.1rem' }}>
+        <span><strong style={{ color: t.newPunches > 0 ? 'var(--brand-primary-ink)' : 'var(--text-heading)' }}>{num(t.newPunches)}</strong> new punch{t.newPunches === 1 ? '' : 'es'} inserted</span>
+        <span><strong style={{ color: 'var(--text-heading)' }}>{num(t.duplicatePunches)}</strong> already-known punch{t.duplicatePunches === 1 ? '' : 'es'} deduplicated</span>
       </div>
       {days.length > 0 && (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem' }}>
