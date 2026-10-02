@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useOrganization } from '../context/OrganizationContext';
 import { useAuth } from '../context/AuthContext';
 import { useDateRange } from '../hooks/useDateRange';
@@ -31,6 +31,10 @@ export default function Dashboard({ onNavigate }) {
   const [pending, setPending] = useState(null);
   const [myRecords, setMyRecords] = useState([]);
   const [loading, setLoading] = useState(true);
+  // The dashboard opens on the calendar month; if that month has just started and
+  // holds no attendance yet, we fall back once to a rolling 30-day window so the
+  // board shows real recent activity instead of an empty first-of-the-month.
+  const smartFallbackDone = useRef(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -50,6 +54,20 @@ export default function Dashboard({ onNavigate }) {
       if (tr.success) setTrend(tr.trend || []);
       if (pend.success) setPending(pend);
       if (mine.success) setMyRecords(mine.records || []);
+    
+      // One-time smart fallback: on the initial 'month' load, if the current month is
+      // still empty (staff exist but nothing logged yet) switch to the last 30 days.
+      if (!smartFallbackDone.current) {
+        smartFallbackDone.current = true;
+        if (sum.success) {
+          const st = sum.stats || {};
+          const rows = (st.presentCount || 0) + (st.absentCount || 0) + (st.halfDayCount || 0);
+          if (rows === 0 && Number(st.totalHours || 0) === 0 && (st.totalStaff || 0) > 0) {
+            setMode('last30');
+            return; // re-runs load with the 30-day window
+          }
+        }
+      }
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [from, to, authFetch, hasPerm, dataScope]);

@@ -26,6 +26,13 @@ export function getRange(mode) {
       return { from: toStr(first), to: toStr(last), label: now.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) };
     }
 
+    // Rolling trailing 30-day window (today and the 29 days before it). Used as a
+    // sensible fallback when the calendar month has just started and holds no data yet.
+    case 'last30': {
+      const from30 = new Date(now); from30.setDate(now.getDate() - 29);
+      return { from: toStr(from30), to: toStr(now), label: 'Last 30 days' };
+    }
+
     case 'quarter': {
       const qStart = new Date(y, Math.floor(m / 3) * 3, 1);
       const qEnd = new Date(y, Math.floor(m / 3) * 3 + 3, 0);

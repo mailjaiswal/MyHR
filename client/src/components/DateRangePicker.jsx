@@ -5,6 +5,7 @@ import CalendarRangePicker from './CalendarRangePicker';
 const MODES = [
   { key: 'day', label: 'Day' },
   { key: 'week', label: 'Week' },
+  { key: 'last30', label: '30 Days' },
   { key: 'month', label: 'Month' },
   { key: 'quarter', label: 'Quarter' },
   { key: 'year', label: 'Year' },
