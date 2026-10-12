@@ -556,3 +556,19 @@ ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS backup_storage_bucket
 ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS backup_storage_access_key TEXT;
 ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS backup_storage_secret_enc TEXT;
 ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS backup_categories_json TEXT;
+
+-- ============================================================
+-- Migration V8 — Performance indexes for hot read paths.
+-- Dashboard/attendance/payroll queries filter by DATE ranges
+-- and month strings across ALL employees; the existing indexes
+-- are leading-employee_id composites, so those scans were full.
+-- All CREATE INDEX IF NOT EXISTS ⇒ safe on every boot.
+-- ============================================================
+CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance_records (duty_date);
+CREATE INDEX IF NOT EXISTS idx_attendance_status_date ON attendance_records (status, duty_date);
+CREATE INDEX IF NOT EXISTS idx_punches_time ON biometric_punches (punch_time);
+CREATE INDEX IF NOT EXISTS idx_payslips_month ON payslips (month_year);
+CREATE INDEX IF NOT EXISTS idx_payslips_emp_month ON payslips (employee_id, month_year);
+CREATE INDEX IF NOT EXISTS idx_leave_emp ON leave_requests (employee_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_corrections_status ON attendance_corrections (status, created_at);
+CREATE INDEX IF NOT EXISTS idx_emp_status ON employees (status);

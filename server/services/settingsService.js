@@ -42,7 +42,22 @@ function defaultSettings() {
   };
 }
 
+// Organizations/settings are read on almost every request (health, org info,
+// engines, branding) but change rarely — a short per-instance TTL cache kills
+// a DB round trip on nearly every API call. Writes invalidate immediately.
+let settingsCache = null; // { at, value }
+const SETTINGS_TTL = 30000;
+
 async function getSettings() {
+  if (settingsCache && Date.now() - settingsCache.at < SETTINGS_TTL) return { ...settingsCache.value };
+  const value = await loadSettings();
+  settingsCache = { at: Date.now(), value };
+  return { ...value };
+}
+
+function invalidateSettings() { settingsCache = null; }
+
+async function loadSettings() {
   const defaults = defaultSettings();
   const row = await db.get('SELECT * FROM organizations WHERE id = ?', 'org_main');
   if (!row) return { ...defaults };
@@ -102,6 +117,7 @@ async function updateSettings(fields = {}) {
     ON CONFLICT(id) DO UPDATE SET ${setClause}
   `, ...values);
 
+  invalidateSettings();
   return getSettings();
 }
 
@@ -109,5 +125,6 @@ module.exports = {
   SETTINGS_FIELDS,
   defaultSettings,
   getSettings,
-  updateSettings
+  updateSettings,
+  invalidateSettings
 };

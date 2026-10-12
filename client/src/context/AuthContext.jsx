@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { cachedJson, invalidateAuthCache } from '../utils/authCache';
 
 const AuthContext = createContext();
 
@@ -86,6 +87,7 @@ export function AuthProvider({ children }) {
     try {
       await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
     } catch { /* ignore */ }
+    invalidateAuthCache(); // never leak one user's cached JSON to the next login
     setToken(null);
     setUser(null);
     setPermissions([]);
@@ -98,8 +100,11 @@ export function AuthProvider({ children }) {
     return permissions.includes(key);
   }, [permissions]);
 
-  // Helper: attach Authorization header to fetch calls
+  // Helper: attach Authorization header to fetch calls.
+  // Any mutation instantly invalidates the whole GET cache below.
   const authFetch = useCallback((path, opts = {}) => {
+    const method = (opts.method || 'GET').toUpperCase();
+    if (method !== 'GET') invalidateAuthCache();
     return fetch(path, {
       ...opts,
       credentials: 'include',
@@ -110,6 +115,19 @@ export function AuthProvider({ children }) {
     });
   }, [token]);
 
+  // One-stop JSON API with success-shape normalisation + optional TTL cache.
+  // Pages: `api('/api/v1/dashboard/summary?...', { cache: true })` ⇒ instant
+  // back-navigation; writes anywhere (via authFetch or api) clear it instantly.
+  const api = useCallback((path, opts = {}, extra = {}) => {
+    const method = (opts.method || 'GET').toUpperCase();
+    const fetcher = () => authFetch(path, opts);
+    if (method !== 'GET' || !extra.cache) {
+      return fetcher().then(r => r.json()).then(d => (d.success ? d : { success: false, error: d.error || d.message }));
+    }
+    return cachedJson(path, { ttl: extra.ttl, force: extra.force }, fetcher)
+      .then(d => (d && d.success ? d : { success: false, error: (d && (d.error || d.message)) || 'Request failed' }));
+  }, [authFetch]);
+
   // Platform owner flag — drives Master Admin & Demo Lab visibility. Server-side
   // guards enforce the same rule; this is the UI mirror, never a trust boundary.
   const isMasterAdmin = user?.role === 'SUPER_ADMIN';
@@ -118,7 +136,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       token, user, permissions, dataScope, role, isMasterAdmin,
       mustChangePassword, setMustChangePassword,
-      loading, login, logout, hasPerm, authFetch
+      loading, login, logout, hasPerm, authFetch, api
     }}>
       {children}
     </AuthContext.Provider>

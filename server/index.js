@@ -8,6 +8,7 @@ require('dotenv').config({ path: __dirname + '/.env' });
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const compression = require('compression');
 const path = require('path');
 const config = require('./config');
 const { migrate } = require('./db/database');
@@ -16,6 +17,9 @@ const { getSettings } = require('./services/settingsService');
 const app = express();
 
 // Middleware
+// gzip/deflate every response — attendance/payroll JSON payloads compress ~85%,
+// which dominates perceived latency from Indian edges to the US region.
+app.use(compression({ threshold: 868 }));
 app.use(cors({
   // Allow all origins in dev; restrict to CORS_ORIGINS allowlist when configured.
   origin: config.CORS_ORIGINS.length

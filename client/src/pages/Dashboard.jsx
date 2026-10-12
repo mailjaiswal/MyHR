@@ -23,7 +23,7 @@ function StatCard({ icon: Icon, label, value, hint, tone = 'default', onClick })
 
 export default function Dashboard({ onNavigate }) {
   const { org } = useOrganization();
-  const { user, hasPerm, dataScope, authFetch } = useAuth();
+  const { user, hasPerm, dataScope, api } = useAuth();
   const { dateRange, setMode, setCustom, from, to } = useDateRange('last30');
 
   const [summary, setSummary] = useState(null);
@@ -32,18 +32,20 @@ export default function Dashboard({ onNavigate }) {
   const [myRecords, setMyRecords] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // { cache: true } ⇒ back-navigation to the dashboard paints instantly from
+  // the shared GET cache; any write anywhere in the app invalidates it.
   const load = useCallback(() => {
     setLoading(true);
     const qs = `?from=${from}&to=${to}`;
 
     Promise.all([
-      authFetch(`/api/v1/dashboard/summary${qs}`).then(r => r.json()),
-      authFetch(`/api/v1/dashboard/trend${qs}`).then(r => r.json()),
+      api(`/api/v1/dashboard/summary${qs}`, {}, { cache: true }),
+      api(`/api/v1/dashboard/trend${qs}`, {}, { cache: true }),
       hasPerm('REGULARIZATION_APPROVE') || hasPerm('LEAVES_APPROVE')
-        ? authFetch('/api/v1/dashboard/pending-actions').then(r => r.json())
+        ? api('/api/v1/dashboard/pending-actions', {}, { cache: true })
         : Promise.resolve({ success: false }),
       dataScope === 'SELF'
-        ? authFetch(`/api/v1/dashboard/my-attendance${qs}`).then(r => r.json())
+        ? api(`/api/v1/dashboard/my-attendance${qs}`, {}, { cache: true })
         : Promise.resolve({ success: false })
     ]).then(([sum, tr, pend, mine]) => {
       if (sum.success) setSummary(sum);
@@ -52,7 +54,7 @@ export default function Dashboard({ onNavigate }) {
       if (mine.success) setMyRecords(mine.records || []);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, [from, to, authFetch, hasPerm, dataScope]);
+  }, [from, to, api, hasPerm, dataScope]);
 
   useEffect(load, [load]);
 

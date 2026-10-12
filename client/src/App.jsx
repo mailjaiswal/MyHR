@@ -1,29 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { OrganizationProvider, useOrganization } from './context/OrganizationContext';
 import Sidebar from './components/Sidebar';
 import MobileNav from './components/MobileNav';
-import PayslipModal from './components/PayslipModal';
 import PasswordChangeModal from './components/PasswordChangeModal';
 import OnboardingWizardModal from './components/OnboardingWizardModal';
 import Login from './pages/Login';
 import useSpotlight from './hooks/useSpotlight';
-import { Menu as MenuIcon } from 'lucide-react';
+import { Menu as MenuIcon, Loader2 } from 'lucide-react';
 
-// Pages
-import Dashboard from './pages/Dashboard';
-import Attendance from './pages/Attendance';
-import Payroll from './pages/Payroll';
-import Employees from './pages/Employees';
-import Leaves from './pages/Leaves';
-import ShiftRoster from './pages/ShiftRoster';
-import Regularization from './pages/Regularization';
-import AuditLog from './pages/AuditLog';
-import Settings from './pages/Settings';
-import DemoLab from './pages/DemoLab';
-import MasterAdminSettings from './pages/MasterAdminSettings';
+// Pages are code-split: the initial shell only ships Login + Dashboard +
+// sidebar chrome. Everything else streams in on first visit, and below we
+// warm the caches during the first idle moment after login so navigation
+// after that is instant.
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Attendance = lazy(() => import('./pages/Attendance'));
+const Payroll = lazy(() => import('./pages/Payroll'));
+const Employees = lazy(() => import('./pages/Employees'));
+const Leaves = lazy(() => import('./pages/Leaves'));
+const ShiftRoster = lazy(() => import('./pages/ShiftRoster'));
+const Regularization = lazy(() => import('./pages/Regularization'));
+const AuditLog = lazy(() => import('./pages/AuditLog'));
+const Settings = lazy(() => import('./pages/Settings'));
+const DemoLab = lazy(() => import('./pages/DemoLab'));
+const MasterAdminSettings = lazy(() => import('./pages/MasterAdminSettings'));
+const PayslipModal = lazy(() => import('./components/PayslipModal'));
 import BrandLogo from './components/BrandLogo';
+
+function PageFallback() {
+  return (
+    <div className="loading-state">
+      <Loader2 size={28} className="spin" />
+      <p>Loading…</p>
+    </div>
+  );
+}
 
 function AppContent() {
   const { user, loading, mustChangePassword, authFetch, isMasterAdmin } = useAuth();
@@ -33,6 +45,29 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [demoKey, setDemoKey] = useState('simulator');
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
+  // Pre-warm every page chunk once the shell is up, using the browser's idle
+  // time. Low priority, parallel, never blocks interaction — by the time the
+  // user clicks a sidebar item the module is already in memory.
+  useEffect(() => {
+    if (!user || loading) return;
+    const warm = () => {
+      const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 200));
+      idle(() => {
+        import('./pages/Attendance');
+        import('./pages/Payroll');
+        import('./pages/Employees');
+        import('./pages/Leaves');
+        import('./pages/ShiftRoster');
+        import('./pages/Regularization');
+        import('./pages/AuditLog');
+        import('./pages/Settings');
+        if (isMasterAdmin) { import('./pages/DemoLab'); import('./pages/MasterAdminSettings'); }
+      });
+    };
+    const t = setTimeout(warm, 1200);
+    return () => clearTimeout(t);
+  }, [user, loading, isMasterAdmin]);
 
   const [isPayslipOpen, setIsPayslipOpen] = useState(false);
   const [payslipData, setPayslipData] = useState(null);
@@ -131,7 +166,9 @@ function AppContent() {
         </header>
 
         <main className="main-content-wrapper" id="main-content">
-          {renderPage()}
+          <Suspense fallback={<PageFallback />}>
+            {renderPage()}
+          </Suspense>
         </main>
       </div>
 
