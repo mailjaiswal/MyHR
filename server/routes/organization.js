@@ -10,10 +10,19 @@ const { generateEmployeeCode } = require('../services/employeeCodeService');
 
 const ORG_ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN'];
 const EMPLOYEE_STATUSES = ['ACTIVE', 'INACTIVE', 'TERMINATED', 'ON_LEAVE'];
+// SUPER_ADMIN is intentionally NOT assignable through any company-facing API —
+// exactly one platform owner holds it (created via the owner seed / Master Admin console).
+const ASSIGNABLE_ROLES = ['ADMIN', 'MANAGER', 'EMPLOYEE'];
+const ROLE_ID_BY_KEY = { ADMIN: 'role_admin', MANAGER: 'role_manager', EMPLOYEE: 'role_employee' };
 
 function isOrgAdminReq(req) {
   return ORG_ADMIN_ROLES.includes(req.currentUser?.role);
 }
+
+// The platform owner (the single SUPER_ADMIN) is not company staff: it must not
+// appear in — or be operable from — any company management screen unless the
+// actor is the owner themselves.
+const actorIsOwner = (req) => req.currentUser?.role === 'SUPER_ADMIN';
 
 // Friendly duplicate-ID lookup shared by create/edit UI.
 async function findIdHolder(field, value, excludeId) {
@@ -96,8 +105,130 @@ router.put('/settings', requireAuth, accessGuard, requirePerm('SETTINGS_EDIT'), 
 // 2. Departments
 router.get('/departments', async (req, res) => {
   try {
-    const departments = await db.all('SELECT * FROM departments');
+    const departments = await db.all(`
+      SELECT d.*, COALESCE(COUNT(e.id), 0)::int as employee_count
+      FROM departments d
+      LEFT JOIN employees e ON d.id = e.department_id
+      GROUP BY d.id
+      ORDER BY d.name ASC
+    `);
     return res.json({ success: true, departments });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 2b. Create Department (requires SETTINGS_EDIT)
+router.post('/departments', requireAuth, accessGuard, requirePerm('SETTINGS_EDIT'), async (req, res) => {
+  try {
+    const { name, code, head_of_department } = req.body || {};
+    const trimmedName = String(name || '').trim();
+    if (!trimmedName) {
+      return res.status(400).json({ error: 'Department name is required' });
+    }
+
+    const genCode = String(code || trimmedName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)).toUpperCase();
+    const existing = await db.get('SELECT id FROM departments WHERE LOWER(name) = LOWER(?) OR (code IS NOT NULL AND LOWER(code) = LOWER(?))', trimmedName, genCode);
+    if (existing) {
+      return res.status(409).json({ error: 'A department with this name or code already exists' });
+    }
+
+    const id = `dept_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    await db.run(
+      'INSERT INTO departments (id, code, name, head_of_department) VALUES (?, ?, ?, ?)',
+      id, genCode, trimmedName, head_of_department ? String(head_of_department).trim() : null
+    );
+
+    const created = await db.get('SELECT d.*, 0 as employee_count FROM departments d WHERE d.id = ?', id);
+    await audit(req, 'department.create', {
+      entityType: 'department', entityId: id,
+      summary: `Department '${trimmedName}' (${genCode}) created`,
+      details: { name: trimmedName, code: genCode, head_of_department }
+    });
+    return res.status(201).json({ success: true, message: `Department '${trimmedName}' created`, department: created });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 2c. Update Department (requires SETTINGS_EDIT)
+router.put('/departments/:id', requireAuth, accessGuard, requirePerm('SETTINGS_EDIT'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, code, head_of_department } = req.body || {};
+
+    const existing = await db.get('SELECT * FROM departments WHERE id = ?', id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Department not found' });
+    }
+
+    const updatedName = name !== undefined ? String(name).trim() : existing.name;
+    const updatedCode = code !== undefined ? String(code).trim().toUpperCase() : existing.code;
+    const updatedHod = head_of_department !== undefined ? (head_of_department ? String(head_of_department).trim() : null) : existing.head_of_department;
+
+    if (!updatedName) {
+      return res.status(400).json({ error: 'Department name cannot be empty' });
+    }
+
+    // Check duplicate name or code for other departments
+    const dup = await db.get(
+      'SELECT id FROM departments WHERE id <> ? AND (LOWER(name) = LOWER(?) OR (code IS NOT NULL AND LOWER(code) = LOWER(?)))',
+      id, updatedName, updatedCode
+    );
+    if (dup) {
+      return res.status(409).json({ error: 'Another department already uses this name or code' });
+    }
+
+    await db.run(
+      'UPDATE departments SET name = ?, code = ?, head_of_department = ? WHERE id = ?',
+      updatedName, updatedCode, updatedHod, id
+    );
+
+    const updated = await db.get(`
+      SELECT d.*, COALESCE(COUNT(e.id), 0)::int as employee_count
+      FROM departments d
+      LEFT JOIN employees e ON d.id = e.department_id
+      WHERE d.id = ?
+      GROUP BY d.id
+    `, id);
+
+    await audit(req, 'department.update', {
+      entityType: 'department', entityId: id,
+      summary: `Department '${updated.name}' updated`,
+      details: { changes: diffFields(existing, updated) }
+    });
+
+    return res.json({ success: true, message: `Department '${updated.name}' updated`, department: updated });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 2d. Delete Department (requires SETTINGS_EDIT, protected if employees assigned)
+router.delete('/departments/:id', requireAuth, accessGuard, requirePerm('SETTINGS_EDIT'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = await db.get('SELECT * FROM departments WHERE id = ?', id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Department not found' });
+    }
+
+    const empCount = await db.get('SELECT count(*)::int as c FROM employees WHERE department_id = ?', id);
+    if (empCount && empCount.c > 0) {
+      return res.status(400).json({
+        error: 'CANNOT_DELETE_ACTIVE_DEPARTMENT',
+        message: `Cannot delete department '${existing.name}': ${empCount.c} employee(s) are currently assigned to it. Please reassign them first.`
+      });
+    }
+
+    await db.run('DELETE FROM departments WHERE id = ?', id);
+    await audit(req, 'department.delete', {
+      entityType: 'department', entityId: id,
+      summary: `Department '${existing.name}' deleted`,
+      details: { deleted: existing }
+    });
+
+    return res.json({ success: true, message: `Department '${existing.name}' deleted successfully` });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -252,6 +383,8 @@ router.get('/employees', requireAuth, accessGuard, requirePerm('EMPLOYEES_VIEW')
     `;
     const params = [...empScope.params];
 
+    if (!actorIsOwner(req)) sql += ` AND e.role <> 'SUPER_ADMIN'`;
+
     const statusSel = String(status || 'ACTIVE').toUpperCase();
     if (statusSel === 'ALL' && isOrgAdminReq(req)) {
       // everything visible to this scope
@@ -310,7 +443,7 @@ router.post('/employees', requireAuth, accessGuard, requirePerm('EMPLOYEES_EDIT'
       const shift = await db.get('SELECT id FROM shifts WHERE id = ?', b.shift_id);
       if (!shift) return res.status(404).json({ error: 'Shift not found' });
     }
-    const role = ['SUPER_ADMIN', 'ADMIN', 'EMPLOYEE'].includes(b.role) ? b.role : 'EMPLOYEE';
+    const role = ASSIGNABLE_ROLES.includes(b.role) ? b.role : 'EMPLOYEE';
 
     const bioId = b.biometric_user_id != null ? String(b.biometric_user_id).trim() : '';
     if (bioId) {
@@ -335,14 +468,14 @@ router.post('/employees', requireAuth, accessGuard, requirePerm('EMPLOYEES_EDIT'
     await db.run(`
       INSERT INTO employees (id, employee_code, biometric_user_id, first_name, last_name, full_name,
         gender, designation, department_id, shift_id, date_of_joining, mobile, email,
-        employment_type, base_ctc, role, status,
+        employment_type, base_ctc, role, role_id, status,
         card_no, date_of_birth, nationality, city, contact_tel, office_tel, verify_mode, esi_ip)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE',
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE',
         ?, ?, ?, ?, ?, ?, ?, ?)
     `, id, code, bioId || null, firstName, b.last_name || null, fullName,
       b.gender || null, b.designation || null, b.department_id, b.shift_id || null,
       b.date_of_joining || new Date().toISOString().slice(0, 10), b.mobile || null, b.email || null,
-      b.employment_type || 'REGULAR', Number(b.base_ctc) || 0, role,
+      b.employment_type || 'REGULAR', Number(b.base_ctc) || 0, role, ROLE_ID_BY_KEY[role] || 'role_employee',
       b.card_no || null, b.date_of_birth || null, b.nationality || null, b.city || null,
       b.contact_tel || null, b.office_tel || null, b.verify_mode || 'FINGERPRINT', b.esi_ip || null);
 
@@ -353,12 +486,57 @@ router.post('/employees', requireAuth, accessGuard, requirePerm('EMPLOYEES_EDIT'
       LEFT JOIN shifts s ON e.shift_id = s.id
       WHERE e.id = ?
     `, id);
+
+    // Auto-dispatch Onboarding & Offer Letter email if requested & recipient email exists
+    let emailQueued = false;
+    if (b.send_welcome_email !== false && b.email && String(b.email).includes('@')) {
+      try {
+        const { notify } = require('../services/notificationService');
+        await notify('employee.onboarding_welcome', { employeeId: id, force: true });
+        emailQueued = true;
+      } catch (err) {
+        console.error('Failed to queue onboarding welcome email:', err.message);
+      }
+    }
+
     await audit(req, 'employee.create', {
       entityType: 'employee', entityId: id,
-      summary: `Employee '${fullName}' (${code}) added`,
-      details: { employee_code: code, biometric_user_id: bioId || null, department_id: b.department_id, role }
+      summary: `Employee '${fullName}' (${code}) added${emailQueued ? ' and onboarding offer letter emailed' : ''}`,
+      details: { employee_code: code, biometric_user_id: bioId || null, department_id: b.department_id, role, emailQueued }
     });
-    return res.status(201).json({ success: true, message: `Employee '${fullName}' added as ${code}`, employee: created });
+    return res.status(201).json({
+      success: true,
+      message: `Employee '${fullName}' added as ${code}${emailQueued ? ' (Offer letter sent)' : ''}`,
+      employee: created,
+      emailQueued
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 5b. Resend / Send Onboarding Offer Letter & Checklist Pack (requires EMPLOYEES_EDIT)
+router.post('/employees/:id/send-onboarding', requireAuth, accessGuard, requirePerm('EMPLOYEES_EDIT'), async (req, res) => {
+  try {
+    const emp = await db.get('SELECT id, full_name, email FROM employees WHERE id = ?', req.params.id);
+    if (!emp) return res.status(404).json({ error: 'Employee not found' });
+    if (!emp.email || !String(emp.email).includes('@')) {
+      return res.status(400).json({ error: `Cannot send onboarding pack: No valid email address configured for ${emp.full_name}.` });
+    }
+
+    const { notify } = require('../services/notificationService');
+    const result = await notify('employee.onboarding_welcome', { employeeId: emp.id, force: true });
+
+    await audit(req, 'employee.onboarding_email', {
+      entityType: 'employee', entityId: emp.id,
+      summary: `Onboarding offer letter and checklist emailed to ${emp.full_name} (${emp.email})`,
+      details: { email: emp.email, result }
+    });
+
+    return res.json({
+      success: true,
+      message: `Onboarding offer letter & document checklist sent to ${emp.email}`
+    });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -380,6 +558,10 @@ router.get('/employees/:id', requireAuth, accessGuard, requirePerm('EMPLOYEES_VI
       WHERE e.id = ?
     `, req.params.id);
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    // The platform owner is invisible to company management screens.
+    if (employee.role === 'SUPER_ADMIN' && !actorIsOwner(req)) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
     // Archived staff dossiers are org-admin only (5c/5d decision).
     if (employee.status !== 'ACTIVE' && !isOrgAdminReq(req)) {
       return res.status(403).json({ error: 'Only admins can view archived employee records' });
@@ -443,6 +625,10 @@ router.put('/employees/:id', requireAuth, accessGuard, requirePerm('EMPLOYEES_ED
     const { id } = req.params;
     const existing = await db.get('SELECT * FROM employees WHERE id = ?', id);
     if (!existing) return res.status(404).json({ error: 'Employee not found' });
+    // Company screens cannot edit the platform owner's record.
+    if (existing.role === 'SUPER_ADMIN' && !actorIsOwner(req)) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
 
     const {
       role, shift_id, designation, department_id, status,
@@ -450,8 +636,11 @@ router.put('/employees/:id', requireAuth, accessGuard, requirePerm('EMPLOYEES_ED
       employment_type, base_ctc, bank_name, bank_account, bank_ifsc, pan, uan, biometric_user_id,
       card_no, date_of_birth, nationality, city, contact_tel, office_tel, verify_mode, esi_ip
     } = req.body;
-    if (role && !['SUPER_ADMIN', 'ADMIN', 'EMPLOYEE'].includes(role)) {
-      return res.status(400).json({ error: "role must be SUPER_ADMIN, ADMIN or EMPLOYEE" });
+    if (role === 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'SUPER_ADMIN cannot be assigned or changed here — it is held exclusively by the platform owner.' });
+    }
+    if (role && !ASSIGNABLE_ROLES.includes(role)) {
+      return res.status(400).json({ error: `role must be one of ${ASSIGNABLE_ROLES.join(', ')}` });
     }
     if (status && !EMPLOYEE_STATUSES.includes(status)) {
       return res.status(400).json({ error: `status must be one of ${EMPLOYEE_STATUSES.join(', ')}` });
@@ -480,6 +669,7 @@ router.put('/employees/:id', requireAuth, accessGuard, requirePerm('EMPLOYEES_ED
     await db.run(`
       UPDATE employees SET
         role = coalesce(?, role),
+        role_id = coalesce(?, role_id),
         shift_id = coalesce(?, shift_id),
         designation = coalesce(?, designation),
         department_id = coalesce(?, department_id),
@@ -509,7 +699,7 @@ router.put('/employees/:id', requireAuth, accessGuard, requirePerm('EMPLOYEES_ED
         biometric_user_id = coalesce(?, biometric_user_id),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, role ?? null, shift_id ?? null, designation ?? null, department_id ?? null, status ?? null,
+    `, role ?? null, role ? (ROLE_ID_BY_KEY[role] || null) : null, shift_id ?? null, designation ?? null, department_id ?? null, status ?? null,
       nextFirst, nextLast ?? null, nextFullName, gender ?? null, date_of_joining ?? null,
       mobile ?? null, email ?? null, employment_type ?? null, base_ctc != null ? Number(base_ctc) : null,
       bank_name ?? null, bank_account ?? null, bank_ifsc ?? null, pan ?? null, uan ?? null,
@@ -538,6 +728,227 @@ router.put('/employees/:id', requireAuth, accessGuard, requirePerm('EMPLOYEES_ED
       details: { changes: changed }
     });
     return res.json({ success: true, message: `Employee '${updated.full_name}' updated`, employee: updated });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. Mandatory Onboarding Terms & Self-Serve Calculation Disclaimer Acceptance
+router.post('/accept-terms', requireAuth, accessGuard, requirePerm('SETTINGS_EDIT'), async (req, res) => {
+  try {
+    const { terms_version, headcount_band, pf_enabled, esi_enabled, pt_enabled, pt_state } = req.body || {};
+    const fwd = req.headers['x-forwarded-for'];
+    const ip = (fwd ? String(fwd).split(',')[0].trim() : req.socket?.remoteAddress) || '127.0.0.1';
+    const email = req.currentUser?.email || req.currentUser?.full_name || 'admin';
+    const version = terms_version || '2026.1-CALC-UTILITY';
+    const band = headcount_band || '20_PLUS';
+
+    await db.run(`
+      UPDATE organizations SET
+        terms_accepted_at = CURRENT_TIMESTAMP,
+        terms_accepted_by = ?,
+        terms_accepted_ip = ?,
+        terms_version = ?,
+        headcount_band = ?,
+        pf_enabled = COALESCE(?, pf_enabled),
+        esi_enabled = COALESCE(?, esi_enabled),
+        pt_enabled = COALESCE(?, pt_enabled),
+        pt_state = COALESCE(?, pt_state)
+      WHERE id = 'org_main'
+    `, email, ip, version, band, pf_enabled, esi_enabled, pt_enabled, pt_state);
+
+    await audit(req, 'compliance.terms_accepted', {
+      entityType: 'organization', entityId: 'org_main',
+      summary: `Self-serve calculation terms & legal disclaimer accepted by ${email}`,
+      details: { email, ip, version, headcount_band: band, pf_enabled, esi_enabled, pt_enabled }
+    });
+
+    const settings = await getSettings();
+    return res.json({
+      success: true,
+      message: 'Self-serve calculation agreement and legal disclaimers signed successfully',
+      settings
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. Update Statutory Compliance Settings
+router.post('/compliance', requireAuth, accessGuard, requirePerm('SETTINGS_EDIT'), async (req, res) => {
+  try {
+    const { headcount_band, pf_enabled, esi_enabled, pt_enabled, pt_state, lwf_enabled } = req.body || {};
+    await db.run(`
+      UPDATE organizations SET
+        headcount_band = COALESCE(?, headcount_band),
+        pf_enabled = COALESCE(?, pf_enabled),
+        esi_enabled = COALESCE(?, esi_enabled),
+        pt_enabled = COALESCE(?, pt_enabled),
+        pt_state = COALESCE(?, pt_state),
+        lwf_enabled = COALESCE(?, lwf_enabled)
+      WHERE id = 'org_main'
+    `, headcount_band, pf_enabled, esi_enabled, pt_enabled, pt_state, lwf_enabled);
+
+    await audit(req, 'compliance.settings_update', {
+      entityType: 'organization', entityId: 'org_main',
+      summary: `Statutory compliance rules updated`,
+      details: { headcount_band, pf_enabled, esi_enabled, pt_enabled, pt_state, lwf_enabled }
+    });
+
+    const settings = await getSettings();
+    return res.json({ success: true, message: 'Compliance settings updated', settings });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 8. Employee Salary Structure — Read & Update
+router.get('/salary-structure/:employeeId', requireAuth, accessGuard, requirePerm('PAYROLL_VIEW'), async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const emp = await db.get('SELECT id, full_name, employee_code, base_ctc, uan, esi_ip FROM employees WHERE id = ?', employeeId);
+    if (!emp) return res.status(404).json({ error: 'Employee not found' });
+
+    let struct = await db.get(`
+      SELECT * FROM employee_salary_structures
+      WHERE employee_id = ?
+      ORDER BY effective_from DESC, updated_at DESC
+      LIMIT 1
+    `, employeeId);
+
+    // If no custom structure yet, synthesize from employee base_ctc
+    if (!struct) {
+      const ctc = Number(emp.base_ctc || 0);
+      const basic = Math.round(ctc * 0.50);
+      const hra = Math.round(ctc * 0.20);
+      const medical = Math.round(ctc * 0.10);
+      const special = Math.max(0, ctc - (basic + hra + medical));
+      struct = {
+        employee_id: employeeId,
+        effective_from: new Date().toISOString().slice(0, 10),
+        base_ctc: ctc,
+        monthly_gross: ctc,
+        basic_pct: 50.0,
+        basic_amount: basic,
+        hra_pct: 20.0,
+        hra_amount: hra,
+        conveyance_amount: 0,
+        medical_amount: medical,
+        special_allowance: special,
+        pf_opt_in: emp.uan ? 1 : 1,
+        pf_custom_rate: 12.0,
+        pf_cap_ceiling: 1,
+        esi_opt_in: ctc <= 21000 ? 1 : 0,
+        pt_opt_in: 1,
+        tds_mode: 'NEW_REGIME',
+        tds_fixed_monthly: 0,
+        employer_pf_in_ctc: 1,
+        employer_esi_in_ctc: 1,
+        gratuity_in_ctc: 1,
+        is_default: true
+      };
+    }
+
+    const normalized = struct ? {
+      ...struct,
+      monthly_ctc: struct.base_ctc,
+      basic_salary: struct.basic_amount,
+      hra: struct.hra_amount,
+      conveyance: struct.conveyance_amount,
+      medical_allowance: struct.medical_amount,
+      pf_rate_employee: struct.pf_custom_rate,
+      pf_capped_at_15k: struct.pf_cap_ceiling,
+      esi_enabled: struct.esi_opt_in,
+      pt_enabled: struct.pt_opt_in
+    } : null;
+
+    return res.json({ success: true, employee: emp, structure: normalized });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/salary-structure/:employeeId', requireAuth, accessGuard, requirePerm('PAYROLL_MANAGE'), async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const emp = await db.get('SELECT id, full_name, employee_code FROM employees WHERE id = ?', employeeId);
+    if (!emp) return res.status(404).json({ error: 'Employee not found' });
+
+    const b = req.body || {};
+    const base_ctc = Number(b.base_ctc ?? b.monthly_ctc ?? 0);
+    const basic_amount = Number(b.basic_amount ?? b.basic_salary ?? Math.round(base_ctc * 0.5));
+    const hra_amount = Number(b.hra_amount ?? b.hra ?? 0);
+    const conveyance_amount = Number(b.conveyance_amount ?? b.conveyance ?? 0);
+    const medical_amount = Number(b.medical_amount ?? b.medical_allowance ?? 0);
+    const special_allowance = Number(b.special_allowance ?? 0);
+    const pf_opt_in = (b.pf_opt_in ?? b.pf_enabled ?? 1) !== 0 ? 1 : 0;
+    const pf_custom_rate = Number(b.pf_custom_rate ?? b.pf_rate_employee ?? 12.0);
+    const pf_cap_ceiling = (b.pf_cap_ceiling ?? b.pf_capped_at_15k ?? 1) !== 0 ? 1 : 0;
+    const esi_opt_in = (b.esi_opt_in ?? b.esi_enabled ?? 1) !== 0 ? 1 : 0;
+    const pt_opt_in = (b.pt_opt_in ?? b.pt_enabled ?? 1) !== 0 ? 1 : 0;
+    const monthly_gross = basic_amount + hra_amount + conveyance_amount + medical_amount + special_allowance;
+    const effective_from = b.effective_from || new Date().toISOString().slice(0, 10);
+    const structId = `sal_${employeeId}_${Date.now()}`;
+
+    // Insert or update salary structure
+    await db.run(`
+      INSERT INTO employee_salary_structures (
+        id, employee_id, effective_from, base_ctc, monthly_gross,
+        basic_pct, basic_amount, hra_pct, hra_amount,
+        conveyance_amount, medical_amount, special_allowance,
+        pf_opt_in, pf_custom_rate, pf_cap_ceiling, esi_opt_in, pt_opt_in,
+        tds_mode, tds_fixed_monthly, employer_pf_in_ctc, employer_esi_in_ctc,
+        gratuity_in_ctc, updated_at, created_by
+      ) VALUES (
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, CURRENT_TIMESTAMP, ?
+      )
+      ON CONFLICT (employee_id, effective_from) DO UPDATE SET
+        base_ctc = EXCLUDED.base_ctc,
+        monthly_gross = EXCLUDED.monthly_gross,
+        basic_pct = EXCLUDED.basic_pct,
+        basic_amount = EXCLUDED.basic_amount,
+        hra_pct = EXCLUDED.hra_pct,
+        hra_amount = EXCLUDED.hra_amount,
+        conveyance_amount = EXCLUDED.conveyance_amount,
+        medical_amount = EXCLUDED.medical_amount,
+        special_allowance = EXCLUDED.special_allowance,
+        pf_opt_in = EXCLUDED.pf_opt_in,
+        pf_custom_rate = EXCLUDED.pf_custom_rate,
+        pf_cap_ceiling = EXCLUDED.pf_cap_ceiling,
+        esi_opt_in = EXCLUDED.esi_opt_in,
+        pt_opt_in = EXCLUDED.pt_opt_in,
+        tds_mode = EXCLUDED.tds_mode,
+        tds_fixed_monthly = EXCLUDED.tds_fixed_monthly,
+        employer_pf_in_ctc = EXCLUDED.employer_pf_in_ctc,
+        employer_esi_in_ctc = EXCLUDED.employer_esi_in_ctc,
+        gratuity_in_ctc = EXCLUDED.gratuity_in_ctc,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+      structId, employeeId, effective_from, base_ctc, monthly_gross,
+      b.basic_pct || 50.0, basic_amount, b.hra_pct || 20.0, hra_amount,
+      conveyance_amount, medical_amount, special_allowance,
+      b.pf_opt_in !== 0 ? 1 : 0, Number(b.pf_custom_rate || 12.0), b.pf_cap_ceiling !== 0 ? 1 : 0,
+      b.esi_opt_in !== 0 ? 1 : 0, b.pt_opt_in !== 0 ? 1 : 0,
+      b.tds_mode || 'NEW_REGIME', Number(b.tds_fixed_monthly || 0),
+      b.employer_pf_in_ctc !== 0 ? 1 : 0, b.employer_esi_in_ctc !== 0 ? 1 : 0,
+      b.gratuity_in_ctc !== 0 ? 1 : 0, req.currentUser?.email || 'admin'
+    );
+
+    // Keep employees.base_ctc in sync
+    await db.run('UPDATE employees SET base_ctc = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', base_ctc, employeeId);
+
+    await audit(req, 'employee.salary_structure_update', {
+      entityType: 'employee_salary_structure', entityId: employeeId,
+      summary: `Salary structure configured for ${emp.full_name}: ₹${base_ctc.toLocaleString('en-IN')} CTC`,
+      details: { base_ctc, monthly_gross, basic_amount, hra_amount, pf_rate: b.pf_custom_rate }
+    });
+
+    return res.json({ success: true, message: `Salary structure updated for ${emp.full_name}` });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

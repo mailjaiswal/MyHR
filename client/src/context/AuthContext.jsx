@@ -110,9 +110,13 @@ export function AuthProvider({ children }) {
     });
   }, [token]);
 
+  // Platform owner flag — drives Master Admin & Demo Lab visibility. Server-side
+  // guards enforce the same rule; this is the UI mirror, never a trust boundary.
+  const isMasterAdmin = user?.role === 'SUPER_ADMIN';
+
   return (
     <AuthContext.Provider value={{
-      token, user, permissions, dataScope, role,
+      token, user, permissions, dataScope, role, isMasterAdmin,
       mustChangePassword, setMustChangePassword,
       loading, login, logout, hasPerm, authFetch
     }}>

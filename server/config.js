@@ -7,6 +7,8 @@ module.exports = {
   ANUBHAV_PARTNER_API_KEY: process.env.ANUBHAV_API_KEY || 'ANUBHAV_DNH_SECRET_2026',
   JWT_SECRET: process.env.JWT_SECRET || 'dubey-nursing-home-super-secret-key-2026',
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'dubey-nursing-home-refresh-secret-key-2026',
+  // List of e‑mail addresses that are allowed to act as master admin (comma‑separated in .env)
+  MASTER_ADMIN_EMAILS: process.env.MASTER_ADMIN_EMAILS ? process.env.MASTER_ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase()) : [],
   // Comma-separated list of allowed browser origins (empty => allow all, dev-friendly)
   CORS_ORIGINS: (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean),
   

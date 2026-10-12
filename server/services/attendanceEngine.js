@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { db } = require('../db/database');
 const config = require('../config');
+const rulesService = require('./rulesService');
 const { notify } = require('./notificationService');
 
 /**
@@ -87,6 +88,7 @@ function computeEarlyMinutes(dutyDate, lastOut, shift, opts = {}) {
 }
 
 async function ingestPunch({ deviceId, biometricUserId, punchTime, verificationMode = 'FINGERPRINT', inOutMode = 'AUTO', importBatch = null, sourceId = null }) {
+  await rulesService.ensureFresh();
   const punchDate = new Date(punchTime || new Date().toISOString());
   const punchIso = punchDate.toISOString();
   const punchHash = generatePunchHash(deviceId, biometricUserId, punchIso);
@@ -156,16 +158,19 @@ async function ingestPunch({ deviceId, biometricUserId, punchTime, verificationM
   const actualIn = new Date(firstIn);
   let lateMinutes = 0;
   if (actualIn > expectedStartTime) {
-    lateMinutes = Math.max(0, Math.floor((actualIn - expectedStartTime) / (1000 * 60)));
+    // Company grace rule (Rules Center): lateness inside the grace window is forgiven.
+    const grace = rulesService.getRules().attendance.GRACE_PERIOD_MINUTES || 0;
+    lateMinutes = Math.max(0, Math.floor((actualIn - expectedStartTime) / (1000 * 60)) - grace);
   }
 
   const overtimeHours = totalHours > shift.duration_hours ? Math.round((totalHours - shift.duration_hours) * 10) / 10 : 0;
   const earlyMinutes = computeEarlyMinutes(dutyDate, lastOut, shift, { totalHours }) || 0;
 
   let status = 'PRESENT';
-  if (totalHours < config.ATTENDANCE_RULES.HALF_DAY_MIN_HOURS) {
+  const RULES = rulesService.getRules().attendance;
+  if (totalHours < RULES.HALF_DAY_MIN_HOURS) {
     status = 'ABSENT';
-  } else if (totalHours < config.ATTENDANCE_RULES.FULL_DAY_MIN_HOURS) {
+  } else if (totalHours < RULES.FULL_DAY_MIN_HOURS) {
     status = 'HALF_DAY';
   } else if (overtimeHours > 0) {
     status = 'OVERTIME';
@@ -225,8 +230,11 @@ async function ingestPunch({ deviceId, biometricUserId, punchTime, verificationM
  * Manual 'REGULARIZED' days are preserved (never downgraded or deleted).
  */
 async function recomputeAttendance({ from = null, to = null, employeeIds = null } = {}) {
-  const HALF = config.ATTENDANCE_RULES.HALF_DAY_MIN_HOURS;
-  const FULL = config.ATTENDANCE_RULES.FULL_DAY_MIN_HOURS;
+  await rulesService.ensureFresh();
+  const RULES = rulesService.getRules().attendance;
+  const HALF = RULES.HALF_DAY_MIN_HOURS;
+  const FULL = RULES.FULL_DAY_MIN_HOURS;
+  const GRACE = RULES.GRACE_PERIOD_MINUTES || 0;
   const result = { employees: 0, daysWritten: 0, daysDeleted: 0, skipped: 0 };
 
   let employees;
@@ -266,7 +274,7 @@ async function recomputeAttendance({ from = null, to = null, employeeIds = null 
       const totalHours = Math.round(((lastOut - firstIn) / 3600000) * 10) / 10;
       const [sh, sm] = shift.start_time.split(':').map(Number);
       const expected = new Date(`${dutyDate}T${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}:00`);
-      let lateMinutes = firstIn > expected ? Math.max(0, Math.floor((firstIn - expected) / 60000)) : 0;
+      let lateMinutes = firstIn > expected ? Math.max(0, Math.floor((firstIn - expected) / 60000) - GRACE) : 0;
       const overtimeHours = totalHours > shift.duration_hours ? Math.round((totalHours - shift.duration_hours) * 10) / 10 : 0;
       const earlyMinutes = computeEarlyMinutes(dutyDate, lastOut.toISOString(), shift, { totalHours }) || 0;
       let status = 'PRESENT';
@@ -316,14 +324,16 @@ async function recomputeAttendance({ from = null, to = null, employeeIds = null 
  * and the attendance status, exactly as recomputeAttendance does.
  */
 function computeDayMetrics(shift, dutyDate, dateObjs) {
-  const HALF = config.ATTENDANCE_RULES.HALF_DAY_MIN_HOURS;
-  const FULL = config.ATTENDANCE_RULES.FULL_DAY_MIN_HOURS;
+  const RULES = rulesService.getRules().attendance;
+  const HALF = RULES.HALF_DAY_MIN_HOURS;
+  const FULL = RULES.FULL_DAY_MIN_HOURS;
+  const GRACE = RULES.GRACE_PERIOD_MINUTES || 0;
   let firstIn = dateObjs[0], lastOut = dateObjs[0];
   for (const d of dateObjs) { if (d < firstIn) firstIn = d; if (d > lastOut) lastOut = d; }
   const totalHours = Math.round(((lastOut - firstIn) / 3600000) * 10) / 10;
   const [sh, sm] = shift.start_time.split(':').map(Number);
   const expected = new Date(`${dutyDate}T${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}:00`);
-  const lateMinutes = firstIn > expected ? Math.max(0, Math.floor((firstIn - expected) / 60000)) : 0;
+  const lateMinutes = firstIn > expected ? Math.max(0, Math.floor((firstIn - expected) / 60000) - GRACE) : 0;
   const overtimeHours = totalHours > shift.duration_hours ? Math.round((totalHours - shift.duration_hours) * 10) / 10 : 0;
   const earlyMinutes = computeEarlyMinutes(dutyDate, lastOut.toISOString(), shift, { totalHours }) || 0;
   let status = 'PRESENT';
@@ -347,6 +357,7 @@ const chunk = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i +=
  * fast counterpart to recomputeAttendance for the bulk import hot path.
  */
 async function rebuildAttendanceForEmployees(employees) {
+  await rulesService.ensureFresh();
   const result = { employees: 0, daysUpserted: 0, overtimeDays: [] };
   const valid = employees.filter(e => e && e.shift_id && e.biometric_user_id);
   if (!valid.length) return result;

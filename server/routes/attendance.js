@@ -79,9 +79,9 @@ function buildRecordsSql(q, req) {
 
   let sql = `
     SELECT a.*, e.full_name, e.employee_code, e.designation, e.status as employee_status,
-           e.biometric_user_id,
+           e.biometric_user_id, e.city,
            d.name as department_name, s.name as shift_name, s.end_time as shift_end_time,
-           s.start_time as shift_start_time,
+           s.start_time as shift_start_time, s.break_duration_minutes as shift_break_minutes,
            s.is_cross_midnight as shift_cross_midnight
     FROM attendance_records a
     JOIN employees e ON a.employee_id = e.id
@@ -203,20 +203,20 @@ router.get('/export', requirePerm('EXPORTS'), async (req, res) => {
     const { sql, params } = buildRecordsSql(req.query, req);
     const records = attachEarlyMinutes(await db.all(sql, ...params));
 
-    const body = records.map(r => [
-      String(r.duty_date).slice(0, 10), r.employee_code, r.full_name, r.biometric_user_id || '',
-      r.department_name, r.designation || '', r.shift_name, r.status,
-      fmtExportTime(r.first_in_time), fmtExportTime(r.last_out_time),
-      Number(r.late_minutes || 0), Number(r.early_minutes || 0),
-      Number(r.regular_hours || 0).toFixed(1), Number(r.overtime_hours || 0).toFixed(1),
-      Number(r.total_hours || 0).toFixed(1)
-    ]);
-
     const from = String(req.query.from || req.query.date || '').slice(0, 10) || 'all';
     const to = String(req.query.to || '').slice(0, 10) || 'all';
     const fileName = `Attendance_${from}_to_${to}`;
 
+    // ── CSV: flat one-row-per-employee-day record list ──
     if (format === 'csv') {
+      const body = records.map(r => [
+        String(r.duty_date).slice(0, 10), r.employee_code, r.full_name, r.biometric_user_id || '',
+        r.department_name, r.designation || '', r.shift_name, r.status,
+        fmtExportTime(r.first_in_time), fmtExportTime(r.last_out_time),
+        Number(r.late_minutes || 0), Number(r.early_minutes || 0),
+        Number(r.regular_hours || 0).toFixed(1), Number(r.overtime_hours || 0).toFixed(1),
+        Number(r.total_hours || 0).toFixed(1)
+      ]);
       const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
       const csv = '\uFEFF' + [EXPORT_HEADERS, ...body].map(row => row.map(esc).join(',')).join('\r\n');
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -224,24 +224,24 @@ router.get('/export', requirePerm('EXPORTS'), async (req, res) => {
       return res.send(csv);
     }
 
-    const ExcelJS = require('exceljs');
-    const wb = new ExcelJS.Workbook();
-    wb.creator = 'myHR by Swaniki';
-    const ws = wb.addWorksheet('Attendance');
-    ws.columns = EXPORT_HEADERS.map(h => ({ header: h, key: h, width: Math.max(12, h.length + 2) }));
-    body.forEach(row => ws.addRow(Object.fromEntries(EXPORT_HEADERS.map((h, i) => [h, row[i]]))));
-    ws.getRow(1).font = { bold: true };
-    ws.getRow(1).eachCell(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF7F2' } }; });
-    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    // ── XLSX: "Employee Attendance In Out Report" matrix ──
+    const { getSettings } = require('../services/settingsService');
+    const { buildAttendanceMatrixXlsx } = require('../services/attendanceMatrixService');
+    const settings = await getSettings();
+    const buffer = await buildAttendanceMatrixXlsx(records, settings, {
+      from: String(req.query.from || '').slice(0, 10) || String(req.query.date || '').slice(0, 10),
+      to: String(req.query.to || '').slice(0, 10) || String(req.query.date || '').slice(0, 10)
+    });
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}.xlsx"`);
-    await wb.xlsx.write(res);
-    return res.end();
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}_InOut_Report.xlsx"`);
+    res.end(buffer);
+    return;
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 });
+
 
 // 3. Monthly Muster Roll & Total Logged Hours Summary (scope-aware)
 router.get('/summary/monthly', async (req, res) => {

@@ -1,19 +1,34 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Lock, Mail, Loader2, Zap, Sparkles } from 'lucide-react';
+import { Lock, Mail, Loader2, Sparkles } from 'lucide-react';
+import BrandLogo from '../components/BrandLogo';
+
+import SplashScreen from '../components/SplashScreen';
 
 const DEMO_PASSWORD = 'Welcome@123';
 // Click-to-fill demo login so visitors can explore the app with one click.
 const DEMO_ACCOUNTS = [
   { label: 'Administrator', scope: 'All data', email: 'admin@dubeynursinghome.in' },
+  { label: 'Manager', scope: 'Team data', email: 'manager@dubeynursinghome.in' },
+  { label: 'Employee', scope: 'Self data', email: 'employee@dubeynursinghome.in' },
 ];
 
 export default function Login() {
   const { login } = useAuth();
+  const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem('myhr_splash_seen'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const handleSplashFinish = () => {
+    sessionStorage.setItem('myhr_splash_seen', '1');
+    setShowSplash(false);
+  };
+
+  if (showSplash) {
+    return <SplashScreen onFinish={handleSplashFinish} />;
+  }
 
   const fillDemo = (acct) => {
     setEmail(acct.email);
@@ -40,7 +55,7 @@ export default function Login() {
       <div className="login-card">
         <div className="login-brand">
           <div className="brand-logo">
-            <Zap size={22} strokeWidth={2.2} />
+            <BrandLogo size={26} color="#ffffff" />
           </div>
           <div className="brand-inline">
             <span className="brand-name">myHR</span>
@@ -106,8 +121,25 @@ export default function Login() {
           </p>
         </div>
 
-        <p className="login-hint">
-          Contact your HR administrator if you need account access.
+        <p className="login-hint" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <span>Contact your HR administrator for access.</span>
+          <span>·</span>
+          <button
+            type="button"
+            onClick={() => setShowSplash(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              color: '#059669',
+              fontSize: 'inherit',
+              fontWeight: 600,
+              cursor: 'pointer',
+              textDecoration: 'underline'
+            }}
+          >
+            Replay tour
+          </button>
         </p>
       </div>
     </div>

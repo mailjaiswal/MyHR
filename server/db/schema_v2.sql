@@ -481,3 +481,78 @@ ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS day_summary TEXT;
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS emp_code_prefix TEXT DEFAULT '';
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS emp_code_padding INTEGER DEFAULT 4;
 ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS undertime_minutes INTEGER DEFAULT 0;
+
+-- ============================================================
+-- V4: Configurable Email & Onboarding Templates
+-- ============================================================
+CREATE TABLE IF NOT EXISTS email_templates (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body_html TEXT NOT NULL,
+  checklist_items JSONB DEFAULT '[]',
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+INSERT INTO email_templates (id, name, subject, body_html, checklist_items)
+VALUES (
+  'employee.onboarding_welcome',
+  'Employee Onboarding & Offer Letter',
+  'Offer of Employment & Onboarding Checklist — {{company_name}}',
+  'Dear {{employee_name}},<br><br>We are delighted to welcome you to <strong>{{company_name}}</strong>! We are pleased to confirm your appointment for the role of <strong>{{designation}}</strong> in the <strong>{{department}}</strong> department.<br><br>Your joining date is scheduled for <strong>{{date_of_joining}}</strong> with a starting Base CTC of <strong>₹{{base_ctc}}</strong> per annum.<br><br>To ensure a smooth onboarding process, please review the required document checklist below and bring the necessary originals/copies on your joining date.<br><br>If you have any questions prior to joining, please contact {{contact_person}} ({{contact_email}}). We look forward to working with you!',
+  '["Aadhaar Card copy & original for verification", "PAN Card copy", "Educational Degree & Marksheet Certificates", "Previous Employer Relieving Letter & Experience Certificate", "Last 3 Months Salary Slips / Bank Statements", "Cancelled Cheque or Bank Passbook copy (for payroll setup)", "4 Passport-sized Photographs"]'::jsonb
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- V5: Attendance In/Out matrix report config
+--   • attendance_break_enabled → admin opt-in (default OFF) to fill the
+--     per-day "Break Hour" row + "Break Hours" total from the shift's
+--     break_duration_minutes. When OFF those cells stay blank.
+--   • weekly_off_days → comma-separated JS weekday numbers (0=Sun … 6=Sat)
+--     counted as "Total Weekly Off" when the employee has no record that day.
+--     Default '0,6' = Sunday + Saturday.
+-- ============================================================
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS attendance_break_enabled INTEGER DEFAULT 0;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS weekly_off_days TEXT DEFAULT '0,6';
+
+-- ============================================================
+-- Migration V6 — Rules Center: per-company policy overrides.
+-- NULL column  => fall back to the shipped config.js default
+-- (hospital-grade safe numbers), so existing behaviour is
+-- unchanged until an admin explicitly tunes a rule.
+--   • late_grace_minutes      punch-in beyond shift start within
+--                             this window is NOT marked late.
+--   • half_day_min_hours      < => ABSENT, between half/full => HALF_DAY
+--   • full_day_min_hours      >= => PRESENT
+--   • epf_* / esic_* / pt_slabs_json  statutory money math overrides
+--     consumed by payrollEngine via rulesService snapshot.
+-- ============================================================
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS late_grace_minutes INTEGER;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS half_day_min_hours REAL;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS full_day_min_hours REAL;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS epf_employee_rate REAL;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS epf_employer_rate REAL;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS epf_wage_ceiling REAL;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS esic_employee_rate REAL;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS esic_employer_rate REAL;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS esic_wage_limit REAL;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS pt_slabs_json TEXT;
+
+-- ============================================================
+-- Migration V7 — Bring-your-own backup storage.
+-- Clients point daily dumps at THEIR OWN S3-compatible bucket
+-- (AWS S3, Cloudflare R2, MinIO, Backblaze B2, Wasabi...). We
+-- never hold their database copy on our servers. NULL / empty
+-- storage_endpoint  =>  feature off (falls back to any platform
+-- Supabase env config, else backups report as not configured).
+--   • backup_storage_secret enc is AES-256-GCM encrypted at rest.
+--   • backup_categories_json scopes WHICH data goes in the dump
+--     (biometric punches, payslips, employee info, offer emails…).
+-- ============================================================
+ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS backup_storage_endpoint TEXT;
+ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS backup_storage_region TEXT;
+ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS backup_storage_bucket TEXT;
+ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS backup_storage_access_key TEXT;
+ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS backup_storage_secret_enc TEXT;
+ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS backup_categories_json TEXT;

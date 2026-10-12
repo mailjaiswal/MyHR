@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
-import { OrganizationProvider } from './context/OrganizationContext';
+import { OrganizationProvider, useOrganization } from './context/OrganizationContext';
 import Sidebar from './components/Sidebar';
 import MobileNav from './components/MobileNav';
 import PayslipModal from './components/PayslipModal';
 import PasswordChangeModal from './components/PasswordChangeModal';
+import OnboardingWizardModal from './components/OnboardingWizardModal';
 import Login from './pages/Login';
 import useSpotlight from './hooks/useSpotlight';
 import { Menu as MenuIcon } from 'lucide-react';
@@ -21,9 +22,12 @@ import Regularization from './pages/Regularization';
 import AuditLog from './pages/AuditLog';
 import Settings from './pages/Settings';
 import DemoLab from './pages/DemoLab';
+import MasterAdminSettings from './pages/MasterAdminSettings';
+import BrandLogo from './components/BrandLogo';
 
 function AppContent() {
-  const { user, loading, mustChangePassword, authFetch } = useAuth();
+  const { user, loading, mustChangePassword, authFetch, isMasterAdmin } = useAuth();
+  const { org } = useOrganization();
   // Cursor-tracking card ring - a single delegated listener for the whole shell.
   useSpotlight(!loading && !!user);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -61,11 +65,11 @@ function AppContent() {
   if (loading) {
     return (
       <div className="app-shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="loading-state">
-          <div className="brand-logo" style={{ width: 48, height: 48, marginBottom: '1rem' }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M13 2L3 14h9l-1 10 10-12h-9l1-10z"/></svg>
+        <div className="loading-state" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div className="brand-logo" style={{ width: 48, height: 56, marginBottom: '1rem', background: 'transparent', boxShadow: 'none' }}>
+            <BrandLogo size={42} />
           </div>
-          <p>Loading myHR...</p>
+          <p style={{ fontWeight: 500, color: 'var(--text-heading)' }}>Loading myHR by Swaniki...</p>
         </div>
       </div>
     );
@@ -87,7 +91,10 @@ function AppContent() {
       case 'regularization': return <Regularization />;
       case 'audit': return <AuditLog />;
       case 'settings': return <Settings initialTab={settingsNav} onNavigate={handleNavigate} />;
-      case 'demo': return <DemoLab demoKey={demoKey} />;
+      // Platform-owner-only sections: even if the tab is somehow set, non-Super
+      // Admins fall back to the Dashboard (the APIs behind them are gated too).
+      case 'demo': return isMasterAdmin ? <DemoLab demoKey={demoKey} /> : <Dashboard onNavigate={setActiveTab} />;
+      case 'master_admin': return isMasterAdmin ? <MasterAdminSettings /> : <Dashboard onNavigate={setActiveTab} />;
       default: return <Dashboard onNavigate={setActiveTab} />;
     }
   };
@@ -120,7 +127,7 @@ function AppContent() {
           >
             <MenuIcon size={22} />
           </button>
-          <span className="mobile-topbar-title">myHR</span>
+          <span className="mobile-topbar-title">myHR by Swaniki</span>
         </header>
 
         <main className="main-content-wrapper" id="main-content">
@@ -144,6 +151,11 @@ function AppContent() {
 
       {/* Force password change on first login */}
       {mustChangePassword && <PasswordChangeModal forced={true} />}
+
+      {/* Force statutory onboarding & legal hold-harmless sign-off if not accepted */}
+      {!mustChangePassword && (user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && org && !org.terms_accepted_at && (
+        <OnboardingWizardModal isOpen={true} />
+      )}
     </div>
   );
 }

@@ -11,8 +11,10 @@ import {
   Moon,
   LogOut,
   KeyRound,
-  Menu
+  Menu,
+  Crown
 } from 'lucide-react';
+import BrandLogo from './BrandLogo';
 import PasswordChangeModal from './PasswordChangeModal';
 import useEscapeClose from '../hooks/useEscapeClose';
 
@@ -27,7 +29,7 @@ const DEMO_NAV = [
 export default function Sidebar({ activeTab, setActiveTab, demoKey, setDemoKey, isOpen, onClose }) {
   const { isDark, toggleTheme } = useTheme();
   const { org } = useOrganization();
-  const { user, role, hasPerm, logout } = useAuth();
+  const { user, role, hasPerm, isMasterAdmin, logout } = useAuth();
   const [demoOpen, setDemoOpen] = useState(false);
 
   // Escape closes the mobile navigation drawer.
@@ -74,7 +76,7 @@ export default function Sidebar({ activeTab, setActiveTab, demoKey, setDemoKey, 
           <Menu size={20} />
         </button>
         <div className="brand-logo">
-          <Zap size={18} strokeWidth={2.2} />
+          <BrandLogo size={20} color="#ffffff" />
         </div>
         <div className="brand-text">
           <span className="brand-name">myHR</span>
@@ -94,7 +96,8 @@ export default function Sidebar({ activeTab, setActiveTab, demoKey, setDemoKey, 
         <div className="nav-group-label">Main</div>
         {NAV_ITEMS.map(renderItem)}
 
-        {hasPerm('DEMO_LAB') && (
+        {/* Demo Lab is a platform-owner showcase — visible to the Super Admin only. */}
+        {isMasterAdmin && hasPerm('DEMO_LAB') && (
           <>
             <div className="nav-group-label nav-group-label-toggle" onClick={() => setDemoOpen(v => !v)}>
               <span>Demo Lab</span>
@@ -117,6 +120,21 @@ export default function Sidebar({ activeTab, setActiveTab, demoKey, setDemoKey, 
                 })}
               </div>
             )}
+          </>
+        )}
+
+        {/* Master Admin section — platform-level, only for master admin users */}
+        {isMasterAdmin && (
+          <>
+            <div className="nav-group-label" style={{ color: 'var(--amber-500, #f59e0b)' }}>Platform</div>
+            <button
+              onClick={() => go('master_admin')}
+              className={`nav-item ${activeTab === 'master_admin' ? 'nav-item-active' : ''}`}
+              style={activeTab === 'master_admin' ? { borderColor: 'var(--amber-500, #f59e0b)' } : {}}
+            >
+              <Crown size={18} strokeWidth={1.9} style={{ color: 'var(--amber-500, #f59e0b)' }} />
+              <span>Master Admin</span>
+            </button>
           </>
         )}
       </nav>
@@ -159,8 +177,7 @@ export default function Sidebar({ activeTab, setActiveTab, demoKey, setDemoKey, 
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0 0.25rem 0.25rem' }}>
-          <span className="foot-badge">CONCEPT</span>
-          <span className="foot-text">myHR v2</span>
+          <span className="foot-text" style={{ fontSize: '0.72rem', color: 'var(--text-caption)' }}>myHR v4 Powered by Swaniki</span>
         </div>
       </div>
 

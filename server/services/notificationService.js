@@ -74,6 +74,7 @@ const CATALOG = {
     return [emp];
   },
   'employee.created': async () => adminsWith('EMPLOYEES_EDIT'),
+  'employee.onboarding_welcome': async (ctx) => [await emailOfEmployee(ctx.employeeId)],
   'employee.role_changed': async (ctx) => [await emailOfEmployee(ctx.employeeId)],
   'employee.manager_changed': async (ctx) => [await emailOfEmployee(ctx.employeeId)],
   'payroll.completed': async () => adminsWith('PAYROLL_MANAGE'),
@@ -99,7 +100,28 @@ async function notify(event, ctx = {}) {
     if (prefs && prefs[event] === false) return { queued: 0, skipped: 'event disabled' };
 
     const org = await getSettings();
-    const content = buildEventEmail(event, { ...ctx, orgName: org.name, appUrl: ctx.appUrl || APP_URL });
+
+    // Context enrichment for template placeholders
+    const enrichedCtx = { ...ctx, orgName: org.name, company_name: org.name, contact_person: org.contact_person, contact_email: org.contact_email, appUrl: ctx.appUrl || APP_URL };
+    if (ctx.employeeId && (!enrichedCtx.employee_name || !enrichedCtx.designation || !enrichedCtx.department)) {
+      const emp = await db.get(`
+        SELECT e.*, d.name as department_name, s.name as shift_name
+        FROM employees e
+        LEFT JOIN departments d ON e.department_id = d.id
+        LEFT JOIN shifts s ON e.shift_id = s.id
+        WHERE e.id = ?
+      `, ctx.employeeId);
+      if (emp) {
+        enrichedCtx.employee_name = enrichedCtx.employee_name || emp.full_name;
+        enrichedCtx.employee_code = enrichedCtx.employee_code || emp.employee_code;
+        enrichedCtx.designation = enrichedCtx.designation || emp.designation;
+        enrichedCtx.department = enrichedCtx.department || emp.department_name;
+        enrichedCtx.date_of_joining = enrichedCtx.date_of_joining || (emp.date_of_joining ? String(emp.date_of_joining).slice(0, 10) : '');
+        enrichedCtx.base_ctc = enrichedCtx.base_ctc || emp.base_ctc;
+      }
+    }
+
+    const content = await buildEventEmail(event, enrichedCtx);
     if (!content) return { queued: 0, skipped: 'no template' };
 
     const recipients = unique(await resolver(ctx));

@@ -9,7 +9,7 @@ function esc(v) {
 }
 
 // Generic shell: logo-ish header, title, paragraph lines, optional button link.
-function renderEmail({ orgName, title, intro = [], lines = [], note, cta }) {
+function renderEmail({ orgName, title, intro = [], lines = [], note, cta, customHtml }) {
   const introHtml = intro.map(p => `<p style="margin:0 0 12px;">${p}</p>`).join('');
   const linesHtml = lines.length
     ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:4px 0 14px;">${
@@ -23,19 +23,21 @@ function renderEmail({ orgName, title, intro = [], lines = [], note, cta }) {
     ? `<p style="margin:18px 0 6px;"><a href="${esc(cta.url)}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:10px 22px;border-radius:8px;font-size:14px;font-weight:600;">${esc(cta.label || 'Open myHR')}</a></p>`
     : '';
   const noteHtml = note ? `<p style="margin:14px 0 0;color:#64748b;font-size:12px;">${esc(note)}</p>` : '';
+  const bodyContent = customHtml ? customHtml : `${introHtml}${linesHtml}${ctaHtml}`;
+
   return `<!DOCTYPE html>
 <html><body style="margin:0;padding:24px 12px;background:#f1f5f9;font-family:Segoe UI,Arial,Helvetica,sans-serif;color:#0f172a;">
-  <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">
-    <tr><td style="padding:20px 28px 0;">
+  <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:580px;margin:0 auto;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;">
+    <tr><td style="padding:22px 28px 0;">
       <span style="display:inline-block;background:#4f46e5;color:#fff;font-weight:700;border-radius:8px;padding:6px 10px;font-size:14px;letter-spacing:.3px;">myHR</span>
       <span style="color:#64748b;font-size:13px;margin-left:8px;">${esc(orgName)}</span>
     </td></tr>
     <tr><td style="padding:18px 28px 24px;">
-      <h2 style="margin:0 0 14px;font-size:18px;">${esc(title)}</h2>
-      ${introHtml}${linesHtml}${ctaHtml}${noteHtml}
+      <h2 style="margin:0 0 14px;font-size:18px;color:#0f172a;">${esc(title)}</h2>
+      ${bodyContent}${noteHtml}
     </td></tr>
     <tr><td style="padding:14px 28px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:11px;">
-      Automated notification from myHR by Swaniki · ${esc(orgName)}
+      Automated notification from myHR · ${esc(orgName)}
     </td></tr>
   </table>
 </body></html>`;
@@ -162,7 +164,109 @@ const BUILDERS = {
   }
 };
 
-function buildEventEmail(event, ctx) {
+function interpolate(str, ctx) {
+  return String(str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => {
+    return ctx[key] !== undefined && ctx[key] !== null ? String(ctx[key]) : `{{${key}}}`;
+  });
+}
+
+async function getEmailTemplate(templateId) {
+  try {
+    const { db } = require('../db/database');
+    const row = await db.get('SELECT * FROM email_templates WHERE id = ?', templateId);
+    return row || null;
+  } catch {
+    return null;
+  }
+}
+
+async function renderOnboardingEmail(ctx) {
+  const row = await getEmailTemplate('employee.onboarding_welcome');
+  const subjectTemplate = row?.subject || 'Offer of Employment & Onboarding Checklist — {{company_name}}';
+  const bodyTemplate = row?.body_html || 'Dear {{employee_name}},<br><br>We are pleased to offer you the position of <strong>{{designation}}</strong> in the <strong>{{department}}</strong> department at <strong>{{company_name}}</strong>.<br><br>Your scheduled date of joining is <strong>{{date_of_joining}}</strong> with an annual base compensation (CTC) of <strong>₹{{base_ctc}}</strong>.<br><br>Please review the required documentation checklist below and have copies prepared on or before your first day.<br><br>Welcome aboard!';
+
+  let checklist = [];
+  if (row?.checklist_items) {
+    try {
+      checklist = typeof row.checklist_items === 'string' ? JSON.parse(row.checklist_items) : row.checklist_items;
+    } catch { checklist = []; }
+  }
+  if (!Array.isArray(checklist) || checklist.length === 0) {
+    checklist = [
+      'Aadhaar Card copy & original for verification',
+      'PAN Card copy',
+      'Educational Degree & Marksheet Certificates',
+      'Previous Employer Relieving Letter & Experience Certificate',
+      'Last 3 Months Salary Slips / Bank Statements',
+      'Cancelled Cheque or Bank Passbook copy (for payroll setup)',
+      '4 Passport-sized Photographs'
+    ];
+  }
+
+  const subject = interpolate(subjectTemplate, ctx);
+  const interpolatedBody = interpolate(bodyTemplate, ctx);
+
+  const checklistHtml = `
+    <div style="margin:20px 0 16px;padding:16px 20px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+      <div style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">
+        📋 Required Document Checklist for Day 1
+      </div>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;">
+        ${checklist.map(item => `
+          <tr>
+            <td style="padding:5px 8px 5px 0;vertical-align:top;width:18px;color:#4f46e5;font-weight:bold;font-size:13px;">✔</td>
+            <td style="padding:5px 0;font-size:13px;color:#1e293b;line-height:1.45;">${esc(item)}</td>
+          </tr>
+        `).join('')}
+      </table>
+    </div>
+  `;
+
+  const detailsTable = `
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">
+      <tr>
+        <td style="padding:8px 12px 8px 0;color:#64748b;font-size:13px;">Designation</td>
+        <td style="padding:8px 0;font-size:13px;color:#0f172a;font-weight:600;">${esc(ctx.designation || '—')}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px 8px 0;color:#64748b;font-size:13px;">Department</td>
+        <td style="padding:8px 0;font-size:13px;color:#0f172a;font-weight:600;">${esc(ctx.department || '—')}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px 8px 0;color:#64748b;font-size:13px;">Joining Date</td>
+        <td style="padding:8px 0;font-size:13px;color:#0f172a;font-weight:600;">${esc(ctx.date_of_joining || '—')}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px 8px 0;color:#64748b;font-size:13px;">Base CTC</td>
+        <td style="padding:8px 0;font-size:13px;color:#0f172a;font-weight:600;">₹${Number(ctx.base_ctc || 0).toLocaleString('en-IN')}</td>
+      </tr>
+    </table>
+  `;
+
+  const customHtml = `
+    <div style="font-size:14px;line-height:1.6;color:#1e293b;">
+      <div>${interpolatedBody}</div>
+      ${detailsTable}
+      ${checklistHtml}
+    </div>
+  `;
+
+  return {
+    subject,
+    html: renderEmail({
+      orgName: ctx.orgName,
+      title: 'Official Offer of Employment',
+      customHtml,
+      note: 'Please bring originals of the checklist items along with photocopies on your reporting date.'
+    }),
+    text: `${subject}\n\nDear ${ctx.employee_name},\n\nWe are pleased to offer you the position of ${ctx.designation} at ${ctx.orgName}.\nJoining Date: ${ctx.date_of_joining}\nBase CTC: ₹${ctx.base_ctc}\n\nChecklist:\n${checklist.map(i => '- ' + i).join('\n')}`
+  };
+}
+
+async function buildEventEmail(event, ctx) {
+  if (event === 'employee.onboarding_welcome') {
+    return renderOnboardingEmail(ctx);
+  }
   const b = BUILDERS[event];
   if (!b) return null;
   // `title` may be a plain string (most templates) or a function of ctx (dynamic ones).
@@ -174,4 +278,11 @@ function buildEventEmail(event, ctx) {
   };
 }
 
-module.exports = { renderEmail, buildEventEmail, EVENTS: Object.keys(BUILDERS) };
+module.exports = {
+  renderEmail,
+  buildEventEmail,
+  renderOnboardingEmail,
+  getEmailTemplate,
+  interpolate,
+  EVENTS: [...Object.keys(BUILDERS), 'employee.onboarding_welcome']
+};

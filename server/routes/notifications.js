@@ -151,4 +151,91 @@ router.post('/flush-now', requirePerm('SETTINGS_EDIT'), async (req, res) => {
   res.json({ success: true, ...result });
 });
 
+// GET /api/v1/notifications/templates/:id — fetch template with fallback
+router.get('/templates/:id', requirePerm('SETTINGS_VIEW'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    let tpl = await db.get('SELECT * FROM email_templates WHERE id = ?', id);
+    if (!tpl && id === 'employee.onboarding_welcome') {
+      tpl = {
+        id: 'employee.onboarding_welcome',
+        name: 'Employee Onboarding & Offer Letter',
+        subject: 'Offer of Employment & Onboarding Checklist — {{company_name}}',
+        body_html: 'Dear {{employee_name}},<br><br>We are delighted to welcome you to <strong>{{company_name}}</strong>! We are pleased to confirm your appointment for the role of <strong>{{designation}}</strong> in the <strong>{{department}}</strong> department.<br><br>Your joining date is scheduled for <strong>{{date_of_joining}}</strong> with a starting Base CTC of <strong>₹{{base_ctc}}</strong> per annum.<br><br>To ensure a smooth onboarding process, please review the required document checklist below and bring the necessary originals/copies on your joining date.<br><br>If you have any questions prior to joining, please contact {{contact_person}} ({{contact_email}}). We look forward to working with you!',
+        checklist_items: [
+          'Aadhaar Card copy & original for verification',
+          'PAN Card copy',
+          'Educational Degree & Marksheet Certificates',
+          'Previous Employer Relieving Letter & Experience Certificate',
+          'Last 3 Months Salary Slips / Bank Statements',
+          'Cancelled Cheque or Bank Passbook copy (for payroll setup)',
+          '4 Passport-sized Photographs'
+        ]
+      };
+    }
+    if (!tpl) return res.status(404).json({ error: 'Template not found' });
+    let checklist = tpl.checklist_items;
+    if (typeof checklist === 'string') { try { checklist = JSON.parse(checklist); } catch { checklist = []; } }
+    res.json({ success: true, template: { ...tpl, checklist_items: checklist || [] } });
+  } catch (e) {
+    res.status(500).json({ error: 'TEMPLATE_FETCH_FAILED', message: e.message });
+  }
+});
+
+// PUT /api/v1/notifications/templates/:id — update template
+router.put('/templates/:id', requirePerm('SETTINGS_EDIT'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { subject, body_html, checklist_items } = req.body || {};
+    if (!subject || !body_html) {
+      return res.status(400).json({ error: 'subject and body_html are required' });
+    }
+    const cleanChecklist = Array.isArray(checklist_items) ? checklist_items : [];
+    await db.run(`
+      INSERT INTO email_templates (id, name, subject, body_html, checklist_items, updated_at)
+      VALUES (?, ?, ?, ?, ?::jsonb, now())
+      ON CONFLICT (id) DO UPDATE SET
+        subject = EXCLUDED.subject,
+        body_html = EXCLUDED.body_html,
+        checklist_items = EXCLUDED.checklist_items,
+        updated_at = now()
+    `, id, 'Employee Onboarding & Offer Letter', subject, body_html, JSON.stringify(cleanChecklist));
+
+    await audit(req, 'settings.email_template_update', {
+      entityType: 'settings', entityId: id,
+      summary: `Email template '${id}' updated by admin`,
+      details: { subject, checklist_count: cleanChecklist.length }
+    });
+    res.json({ success: true, message: 'Template saved successfully' });
+  } catch (e) {
+    res.status(500).json({ error: 'TEMPLATE_SAVE_FAILED', message: e.message });
+  }
+});
+
+// POST /api/v1/notifications/templates/:id/preview — live letterhead preview
+router.post('/templates/:id/preview', requirePerm('SETTINGS_VIEW'), async (req, res) => {
+  try {
+    const { getSettings } = require('../services/settingsService');
+    const { renderOnboardingEmail } = require('../services/emailTemplates');
+    const org = await getSettings();
+    const sampleCtx = {
+      employee_name: 'Anita Sharma',
+      employee_code: 'EMP-0104',
+      designation: 'Senior Healthcare Specialist',
+      department: 'Clinical Care',
+      date_of_joining: new Date(Date.now() + 86400000 * 7).toISOString().slice(0, 10),
+      base_ctc: 480000,
+      company_name: org.name,
+      orgName: org.name,
+      contact_person: org.contact_person || 'HR Department',
+      contact_email: org.contact_email || 'hr@hospital.in',
+      ...(req.body || {})
+    };
+    const rendered = await renderOnboardingEmail(sampleCtx);
+    res.json({ success: true, ...rendered });
+  } catch (e) {
+    res.status(500).json({ error: 'PREVIEW_FAILED', message: e.message });
+  }
+});
+
 module.exports = router;

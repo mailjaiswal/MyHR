@@ -126,7 +126,7 @@ function seedDatabase() {
       esi: null,
       bankAc: '20192837461',
       pan: 'AADPD4489J',
-      role: 'SUPER_ADMIN'
+      role: 'ADMIN'
     },
     {
       id: 'emp_03',

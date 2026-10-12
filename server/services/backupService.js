@@ -1,9 +1,12 @@
 // server/services/backupService.js
-// Disaster-recovery backups. Produces a portable logical SQL dump of the whole
-// `public` schema (Supabase/Postgres), uploads it to a private Supabase Storage
-// bucket, and records metadata in the `backups` table. Restores are replayed in
-// a single transaction with FK/triggers deferred. Never assumes `pg_dump`/disk
-// availability, so it works inside Vercel serverless.
+// Disaster-recovery backups. Produces a portable logical SQL dump (optionally
+// scoped to the data categories the client opted into) and pushes it to the
+// CLIENT'S OWN S3-compatible bucket — AWS S3, Cloudflare R2, MinIO, Backblaze
+// B2, Wasabi, or a Supabase Storage bucket they created. We deliberately do
+// NOT keep copies on our servers; the platform's own SUPABASE_* env is only a
+// legacy fallback when the client hasn't supplied storage yet. Restores are
+// replayed in a single transaction with FK/triggers deferred. Never assumes
+// `pg_dump`/disk availability, so it works inside Vercel serverless.
 
 const crypto = require('crypto');
 const { db, pool } = require('../db/database');
@@ -11,22 +14,81 @@ const { db, pool } = require('../db/database');
 const EXCLUDED_TABLES = new Set(['backups']); // don't dump the backup ledger itself
 const CHUNK = 1000; // rows per SELECT page
 
+// ── Data categories the client can opt in/out of, per their demand ──────────
+// Every dump always includes the app "brain" (org, roles, rules, shifts,
+// notification settings) — a backup without them can't be restored into a
+// working product. The toggles only ever REMOVE tables from the scope.
+const CATEGORIES = [
+  { key: 'employee_info', label: 'Employee information', desc: 'Profiles, personal details, roles, department & shift mapping.', tables: ['employees', 'employee_personal_details', 'employee_shifts', 'departments', 'roles'] },
+  { key: 'biometric', label: 'Biometric & attendance data', desc: 'Raw device punches, daily attendance and corrections.', tables: ['devices', 'biometric_punches', 'attendance_records', 'attendance_corrections'] },
+  { key: 'payroll', label: 'Payslips & payroll', desc: 'Payroll runs and every generated payslip.', tables: ['payroll_runs', 'payslips'] },
+  { key: 'leave_holidays', label: 'Leave & holiday records', desc: 'Leave types, balances, requests and the holiday calendar.', tables: ['leave_types', 'leave_balances', 'leave_requests', 'holidays', 'ot_policy'] },
+  { key: 'documents', label: 'Employee documents', desc: 'Uploaded document records and metadata.', tables: ['employee_documents'] },
+  { key: 'emails', label: 'Offer letters & email history', desc: 'Offer-letter / notification templates and the sent-mail log.', tables: ['email_templates', 'email_outbox'] },
+  { key: 'audit', label: 'Audit trail', desc: 'Who-did-what log and sync history.', tables: ['audit_logs', 'data_sources', 'sync_logs'] },
+];
+const CORE_TABLES = ['organizations', 'shifts', 'notification_settings'];
+
+// ── Credential encryption at rest (AES-256-GCM, key derived from JWT_SECRET) ─
+function encKey() {
+  return crypto.createHash('sha256').update(String(process.env.JWT_SECRET || 'myhr-dev-fallback-key')).digest();
+}
+function encryptSecret(plain) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', encKey(), iv);
+  const enc = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()]);
+  return `v1:${iv.toString('hex')}:${enc.toString('hex')}:${cipher.getAuthTag().toString('hex')}`;
+}
+function decryptSecret(stored) {
+  const s = String(stored || '');
+  if (!s.startsWith('v1:')) return s; // plaintext written before encryption existed
+  try {
+    const [, ivHex, dataHex, tagHex] = s.split(':');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', encKey(), Buffer.from(ivHex, 'hex'));
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    return Buffer.concat([decipher.update(Buffer.from(dataHex, 'hex')), decipher.final()]).toString('utf8');
+  } catch { return ''; } // wrong key (env rotated) — treat as "re-enter credential"
+}
+
 // ── Configuration ────────────────────────────────────────────────────────────
 async function getBackupConfig() {
-  const s = await db.get(`SELECT backup_enabled, backup_retention_count FROM notification_settings WHERE id = 'main'`);
+  const s = await db.get(`SELECT * FROM notification_settings WHERE id = 'main'`);
   let retention = parseInt(s && s.backup_retention_count, 10);
   if (!Number.isFinite(retention) || retention < 1) retention = 14;
+  let categories = null;
+  try { categories = s.backup_categories_json ? JSON.parse(s.backup_categories_json) : null; } catch { categories = null; }
+  if (!Array.isArray(categories)) categories = CATEGORIES.map(c => c.key);
+  const endpoint = (s && s.backup_storage_endpoint || '').trim();
+  const accessKey = (s && s.backup_storage_access_key || '').trim();
+  const bucket = (s && s.backup_storage_bucket || '').trim();
+  const secret = decryptSecret(s && s.backup_storage_secret_enc);
+  // Client-owned S3-compatible storage takes priority over platform Supabase env.
+  const s3 = Boolean(endpoint && bucket && accessKey && secret);
   return {
     url: (process.env.SUPABASE_URL || '').replace(/\/+$/, ''),
     key: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
     bucket: process.env.BACKUP_BUCKET || 'myhr-backups',
     enabled: !s || Number(s.backup_enabled ?? 1) === 1,
-    retention
+    retention,
+    categories,
+    target: s3 ? 's3' : (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY ? 'supabase' : 'none'),
+    s3config: { endpoint, region: (s && s.backup_storage_region || '').trim() || 'us-east-1', bucket, accessKey, secret }
   };
 }
 
+// Which DB tables the opted-in categories map to (intersected with what
+// actually exists in the schema by orderedTables()). Null categories => all.
+function scopeTables(categories) {
+  const allowed = new Set(CORE_TABLES);
+  const list = Array.isArray(categories) ? categories : CATEGORIES.map(c => c.key);
+  for (const c of CATEGORIES) {
+    if (list.includes(c.key)) for (const t of c.tables) allowed.add(t);
+  }
+  return allowed;
+}
+
 function storageConfigured(cfg) {
-  return Boolean(cfg.url && cfg.key && cfg.bucket);
+  return cfg.target !== 'none';
 }
 
 // ── SQL literal helpers ──────────────────────────────────────────────────────
@@ -47,11 +109,12 @@ function sqlValue(v) {
 }
 
 // ── Table discovery + FK-safe ordering (parents first) ───────────────────────
-async function orderedTables() {
+async function orderedTables(scope = null) {
   const rows = await db.all(
     `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`
   );
-  const tables = rows.map(r => r.tablename).filter(t => !EXCLUDED_TABLES.has(t));
+  let tables = rows.map(r => r.tablename).filter(t => !EXCLUDED_TABLES.has(t));
+  if (scope) tables = tables.filter(t => scope.has(t));
   const set = new Set(tables);
 
   // Edges: child depends on parent.
@@ -88,8 +151,9 @@ async function orderedTables() {
 }
 
 // ── Build the dump ────────────────────────────────────────────────────────────
-async function buildDump() {
-  const tables = await orderedTables();
+async function buildDump(categories) {
+  const scope = scopeTables(categories);
+  const tables = await orderedTables(scope);
   const counts = {};
   const parts = [];
   const stamp = new Date().toISOString();
@@ -132,8 +196,73 @@ async function buildDump() {
   return { sql: parts.join('\n') + '\n', counts };
 }
 
-// ── Supabase Storage I/O (global fetch, Node 18+) ────────────────────────────
+// ── Storage I/O — client S3-compatible bucket (SigV4) or Supabase fallback ──
+function storageBucket(cfg) {
+  return cfg.target === 's3' ? cfg.s3config.bucket : cfg.bucket;
+}
+
+function sha256hex(data) {
+  return crypto.createHash('sha256').update(data).digest('hex');
+}
+function hmacBuf(key, data) {
+  return crypto.createHmac('sha256', key).update(data).digest();
+}
+
+// AWS Signature V4 for a single PUT/GET/DELETE with the full payload hashed.
+// Path-style addressing works against S3, R2, MinIO, B2, Wasabi, i.e. any
+// endpoint that speaks the S3 wire protocol.
+function signRequest({ method, endpointUrl, region, accessKey, secretKey, keyPath, payload }) {
+  const u = new URL(endpointUrl);
+  const host = u.host;
+  const canonUri = u.pathname; // already URL-encoded below
+  const bodyBuf = payload == null ? Buffer.alloc(0) : Buffer.from(payload);
+  const payloadHash = sha256hex(bodyBuf);
+  const amzDate = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const dateStamp = amzDate.slice(0, 8);
+
+  const q = [...u.searchParams.entries()]
+    .map(([k, v]) => [encodeURIComponent(k), encodeURIComponent(v)])
+    .sort((a, b) => (a[0] === b[0] ? a[1].localeCompare(b[1]) : a[0].localeCompare(b[0])))
+    .map(([k, v]) => `${k}=${v}`).join('&');
+
+  const headers = { host, 'x-amz-content-sha256': payloadHash, 'x-amz-date': amzDate };
+  const signedHeaderNames = Object.keys(headers).sort();
+  const canonHeaders = signedHeaderNames.map((h) => `${h}:${headers[h].trim()}\n`).join('');
+  const signedHeaders = signedHeaderNames.join(';');
+
+  const canonReq = [method, canonUri, q, canonHeaders, signedHeaders, payloadHash].join('\n');
+  const scope = `${dateStamp}/${region}/s3/aws4_request`;
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, scope, sha256hex(canonReq)].join('\n');
+  const kDate = hmacBuf(`AWS4${secretKey}`, dateStamp);
+  const kRegion = hmacBuf(kDate, region);
+  const kService = hmacBuf(kRegion, 's3');
+  const kSigning = hmacBuf(kService, 'aws4_request');
+  const signature = crypto.createHmac('sha256', kSigning).update(stringToSign).digest('hex');
+
+  headers['Authorization'] =
+    `AWS4-HMAC-SHA256 Credential=${accessKey}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  return headers;
+}
+
+function s3ObjectUrl(sc, key) {
+  const base = sc.endpoint.replace(/\/+$/, '');
+  return `${base}/${sc.bucket}/${key.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+async function s3Request(cfg, method, key, body) {
+  const sc = cfg.s3config;
+  const url = s3ObjectUrl(sc, key);
+  const headers = signRequest({
+    method, endpointUrl: url, region: sc.region, accessKey: sc.accessKey, secretKey: sc.secret,
+    keyPath: key, payload: method === 'PUT' ? body : null
+  });
+  const res = await fetch(url, { method, headers, body: method === 'PUT' ? body : undefined });
+  if (!res.ok) throw new Error(`Storage ${method} failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+  return res;
+}
+
 async function storageUpload(cfg, key, body) {
+  if (cfg.target === 's3') { await s3Request(cfg, 'PUT', key, body); return; }
   const res = await fetch(`${cfg.url}/storage/v1/object/${cfg.bucket}/${key}`, {
     method: 'POST',
     headers: {
@@ -148,6 +277,7 @@ async function storageUpload(cfg, key, body) {
 }
 
 async function storageDownload(cfg, key) {
+  if (cfg.target === 's3') return (await s3Request(cfg, 'GET', key)).text();
   const res = await fetch(`${cfg.url}/storage/v1/object/${cfg.bucket}/${key}`, {
     headers: { Authorization: `Bearer ${cfg.key}`, apikey: cfg.key }
   });
@@ -157,11 +287,24 @@ async function storageDownload(cfg, key) {
 
 async function storageDelete(cfg, key) {
   try {
+    if (cfg.target === 's3') { await s3Request(cfg, 'DELETE', key); return; }
     await fetch(`${cfg.url}/storage/v1/object/${cfg.bucket}/${key}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${cfg.key}`, apikey: cfg.key }
     });
   } catch { /* best effort */ }
+}
+
+// Round-trip probe against the client's bucket: write → read → delete.
+async function testStorage(sc) {
+  const cfg = { target: 's3', s3config: sc, url: '', key: '', bucket: sc.bucket };
+  const probeKey = `myhr/connection_test_${Date.now()}.txt`;
+  const marker = `myhr-backup-connection-test ${new Date().toISOString()}`;
+  await storageUpload(cfg, probeKey, marker);
+  const read = await storageDownload(cfg, probeKey);
+  await storageDelete(cfg, probeKey);
+  if (!read.includes('myhr-backup-connection-test')) throw new Error('Uploaded object content did not match on read-back.');
+  return { ok: true, bucket: sc.bucket, endpoint: sc.endpoint };
 }
 
 function backupKey(kind, id) {
@@ -175,9 +318,8 @@ function backupKey(kind, id) {
 async function runBackup(kind = 'AUTO', actorId = null) {
   const cfg = await getBackupConfig();
   const id = crypto.randomUUID();
-  const row = { id, kind, status: 'PENDING', size_bytes: 0 };
   if (!storageConfigured(cfg)) {
-    const msg = 'Backups not configured: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (and optionally BACKUP_BUCKET).';
+    const msg = 'No backup destination yet: add your own cloud storage credentials (any S3-compatible bucket) under Backup storage below, and we will deliver daily dumps there.';
     await db.run(
       `INSERT INTO backups (id, kind, status, error, created_by) VALUES (?, ?, 'FAILED', ?, ?)`,
       id, kind, msg, actorId
@@ -185,14 +327,14 @@ async function runBackup(kind = 'AUTO', actorId = null) {
     return { id, kind, status: 'FAILED', error: msg };
   }
   try {
-    const { sql, counts } = await buildDump();
+    const { sql, counts } = await buildDump(cfg.categories);
     const key = backupKey(kind, id);
     await storageUpload(cfg, key, sql);
     const size = Buffer.byteLength(sql, 'utf8');
     await db.run(
       `INSERT INTO backups (id, kind, status, storage_path, bucket, size_bytes, table_counts, created_by)
        VALUES (?, ?, 'SUCCESS', ?, ?, ?, ?::jsonb, ?)`,
-      id, kind, key, cfg.bucket, size, JSON.stringify(counts), actorId
+      id, kind, key, storageBucket(cfg), size, JSON.stringify(counts), actorId
     );
     return { id, kind, status: 'SUCCESS', size_bytes: size, tables: Object.keys(counts).length };
   } catch (e) {
@@ -264,7 +406,12 @@ async function pruneBackups() {
 }
 
 module.exports = {
+  CATEGORIES,
   getBackupConfig,
+  encryptSecret,
+  testStorage,
+  storageConfigured,
+  storageBucket,
   runBackup,
   listBackups,
   getBackup,

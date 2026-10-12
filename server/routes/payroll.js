@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/database');
 const config = require('../config');
-const { runMonthlyPayroll } = require('../services/payrollEngine');
+const { runMonthlyPayroll, detectPayrollAnomalies } = require('../services/payrollEngine');
 const { generateBankDisbursementCSV, generateTallyJV } = require('../services/exportService');
 const { getSettings } = require('../services/settingsService');
 const { requireAuth } = require('../middleware/authGuard');
@@ -237,6 +237,151 @@ router.get('/export/tally/:monthYear', requirePerm('EXPORTS'), async (req, res) 
     res.setHeader('Content-Type', 'application/xml');
     res.setHeader('Content-Disposition', `attachment; filename="${fileBase}_Tally_JV_${monthYear}.xml"`);
     return res.send(xmlContent);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. Pre-Flight Anomaly Detector (checks draft payroll for costly errors)
+router.get('/anomalies/:monthYear', requirePerm('PAYROLL_VIEW'), async (req, res) => {
+  try {
+    const { monthYear } = req.params;
+    const anomalies = await detectPayrollAnomalies(monthYear);
+    return res.json({ success: true, monthYear, count: anomalies.length, anomalies });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 8. Finalize & Lock Payroll with Legal Verification Sign-Off
+router.post('/lock', requirePerm('PAYROLL_MANAGE'), async (req, res) => {
+  try {
+    const { monthYear, disclaimerAcknowledged, approvalNotes } = req.body || {};
+    if (!disclaimerAcknowledged) {
+      return res.status(400).json({
+        error: 'DISCLAIMER_REQUIRED',
+        message: 'The employer verification and self-serve calculation declaration must be acknowledged before locking payroll.'
+      });
+    }
+
+    const run = await db.get('SELECT * FROM payroll_runs WHERE month_year = ?', monthYear);
+    if (!run) return res.status(404).json({ error: 'No payroll run found for this month' });
+
+    const fwd = req.headers['x-forwarded-for'];
+    const ip = (fwd ? String(fwd).split(',')[0].trim() : req.socket?.remoteAddress) || '127.0.0.1';
+    const email = req.currentUser?.email || req.currentUser?.full_name || 'admin';
+
+    await db.run(`
+      UPDATE payroll_runs
+      SET status = 'LOCKED',
+          approved_by = ?,
+          approved_at = CURRENT_TIMESTAMP,
+          approval_notes = ?,
+          disclaimer_acknowledged = 1,
+          disclaimer_ack_ip = ?
+      WHERE id = ?
+    `, email, approvalNotes || 'Authorized and verified by client admin', ip, run.id);
+
+    await audit(req, 'payroll.locked', {
+      entityType: 'payroll_run', entityId: run.id,
+      summary: `Payroll locked and authorized for ${monthLabel(monthYear)} by ${email}`,
+      details: { monthYear, totalEmployees: run.total_employees, totalNet: run.total_net, ip }
+    });
+
+    return res.json({
+      success: true,
+      message: `Payroll for ${monthLabel(monthYear)} has been locked and authorized for disbursement.`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 9. Payroll Vault: View Frozen Immutable Ledger Snapshot
+router.get('/vault/:monthYear', requirePerm('PAYROLL_VIEW'), async (req, res) => {
+  try {
+    const { monthYear } = req.params;
+    const run = await db.get('SELECT * FROM payroll_runs WHERE month_year = ?', monthYear);
+    if (!run) return res.status(404).json({ error: 'No payroll run found for this month' });
+
+    let snapshot = run.snapshot_data;
+    if (typeof snapshot === 'string') {
+      try { snapshot = JSON.parse(snapshot); } catch (e) { snapshot = null; }
+    }
+
+    return res.json({
+      success: true,
+      monthYear,
+      runId: run.id,
+      status: run.status,
+      approvedBy: run.approved_by,
+      approvedAt: run.approved_at,
+      snapshot
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 10. Multi-Bank Batch Disbursement Export (HDFC CMS, ICICI CIB, SBI Corporate, or Generic CSV)
+router.get('/export/bank-batch/:monthYear', requirePerm('EXPORTS'), async (req, res) => {
+  try {
+    const { monthYear } = req.params;
+    const format = (req.query.format || 'generic').toLowerCase();
+    const settings = await getSettings();
+
+    const slips = await db.all(`
+      SELECT p.*, e.full_name, e.employee_code, e.bank_account, e.bank_ifsc, e.bank_name, e.mobile, e.email
+      FROM payslips p
+      JOIN employees e ON p.employee_id = e.id
+      WHERE p.month_year = ?
+      ORDER BY e.employee_code ASC
+    `, monthYear);
+
+    if (slips.length === 0) {
+      return res.status(404).json({ error: `No payslips found for ${monthYear}` });
+    }
+
+    let csvContent = '';
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+    if (format === 'hdfc') {
+      // HDFC Bank CMS Corporate format
+      csvContent = 'Transaction Type,Beneficiary Code,Beneficiary Account No,Amount,Beneficiary Name,Drawee Location,Print Location,Bene Address 1,Bene Address 2,Bene Address 3,Bene City,Bene State,Bene Pin,Payment Reference No,Customer Ref No\r\n';
+      slips.forEach((s, idx) => {
+        const amt = Number(s.net_salary || 0).toFixed(2);
+        const code = s.employee_code || `EMP${idx + 1}`;
+        const ref = `SAL${monthYear.replace('-', '')}${code}`;
+        csvContent += `NEFT,${code},"${s.bank_account || ''}",${amt},"${s.full_name}",,,,,,,,,${ref},${ref}\r\n`;
+      });
+    } else if (format === 'icici') {
+      // ICICI Bank CIB Corporate format
+      csvContent = 'Debit Acct No,Beneficiary Acct No,Beneficiary Name,Amount,Currency,Payment Mode,Date,IFSC Code\r\n';
+      const debitAcct = settings.registration_no || '100000000000';
+      slips.forEach(s => {
+        const amt = Number(s.net_salary || 0).toFixed(2);
+        csvContent += `"${debitAcct}","${s.bank_account || ''}","${s.full_name}",${amt},INR,NEFT,${dateStr},"${s.bank_ifsc || ''}"\r\n`;
+      });
+    } else if (format === 'sbi') {
+      // SBI Corporate CMP format
+      csvContent = 'Payment Type,Debit Account,Beneficiary Name,Beneficiary Account,Beneficiary IFSC,Amount,Narration\r\n';
+      slips.forEach(s => {
+        const amt = Number(s.net_salary || 0).toFixed(2);
+        csvContent += `NEFT,,"${s.full_name}","${s.bank_account || ''}","${s.bank_ifsc || ''}",${amt},"Salary ${monthLabel(monthYear)}"\r\n`;
+      });
+    } else {
+      // Standard Generic RBI NEFT CSV
+      csvContent = 'Beneficiary Name,Account Number,IFSC Code,Net Salary (INR),Employee Code,Payment Date,Narration\r\n';
+      slips.forEach(s => {
+        const amt = Number(s.net_salary || 0).toFixed(2);
+        csvContent += `"${s.full_name}","${s.bank_account || ''}","${s.bank_ifsc || ''}",${amt},"${s.employee_code}","${dateStr}","Salary for ${monthLabel(monthYear)}"\r\n`;
+      });
+    }
+
+    const orgPrefix = settings.name.replace(/[^A-Za-z0-9]+/g, '_').toUpperCase();
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${orgPrefix}_BankBatch_${format.toUpperCase()}_${monthYear}.csv"`);
+    return res.send(csvContent);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

@@ -6,7 +6,10 @@ const config = require('../config');
 const SETTINGS_FIELDS = [
   'name', 'address', 'gstin', 'registration_no', 'contact_person',
   'industry_label', 'tagline', 'director_name', 'director_title',
-  'contact_phone', 'contact_email', 'emp_code_prefix', 'emp_code_padding'
+  'contact_phone', 'contact_email', 'emp_code_prefix', 'emp_code_padding',
+  'headcount_band', 'pf_enabled', 'esi_enabled', 'pt_enabled', 'pt_state', 'lwf_enabled',
+  'attendance_break_enabled', 'weekly_off_days',
+  'terms_accepted_at', 'terms_accepted_by', 'terms_accepted_ip', 'terms_version'
 ];
 
 function defaultSettings() {
@@ -23,7 +26,19 @@ function defaultSettings() {
     contact_phone: '',
     contact_email: '',
     emp_code_prefix: '',
-    emp_code_padding: 4
+    emp_code_padding: 4,
+    headcount_band: '20_PLUS',
+    pf_enabled: 1,
+    esi_enabled: 1,
+    pt_enabled: 1,
+    pt_state: 'MP',
+    lwf_enabled: 0,
+    attendance_break_enabled: 0,
+    weekly_off_days: '0,6',
+    terms_accepted_at: null,
+    terms_accepted_by: null,
+    terms_accepted_ip: null,
+    terms_version: '2026.1-CALC-UTILITY'
   };
 }
 
@@ -35,12 +50,23 @@ async function getSettings() {
   const out = {};
   for (const f of SETTINGS_FIELDS) {
     const v = row[f];
-    out[f] = (v === null || v === undefined || String(v).trim() === '') ? defaults[f] : v;
+    out[f] = (v === null || v === undefined) ? defaults[f] : v;
   }
   // Padding must always be a sane integer regardless of what a form stored.
   const pad = parseInt(out.emp_code_padding, 10);
   out.emp_code_padding = Number.isFinite(pad) ? Math.min(6, Math.max(3, pad)) : 4;
+  // Weekly-off days are stored as a clean, deduped list of JS weekday numbers (0=Sun…6=Sat).
+  out.weekly_off_days = normalizeWeeklyOffDays(out.weekly_off_days);
+  out.attendance_break_enabled = (parseInt(out.attendance_break_enabled, 10) === 1) ? 1 : 0;
   return out;
+}
+
+// Parse any admin-supplied weekly-off representation into a canonical '0,6' style string.
+function normalizeWeeklyOffDays(v) {
+  const raw = Array.isArray(v) ? v.join(',') : String(v ?? '');
+  const days = [...new Set(raw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))]
+    .sort((a, b) => a - b);
+  return days.length ? days.join(',') : '0,6';
 }
 
 async function updateSettings(fields = {}) {
@@ -54,11 +80,27 @@ async function updateSettings(fields = {}) {
   const cols = SETTINGS_FIELDS.join(', ');
   const placeholders = SETTINGS_FIELDS.map(() => '?').join(', ');
   const setClause = SETTINGS_FIELDS.map(f => `${f} = excluded.${f}`).join(', ');
+
+  const values = SETTINGS_FIELDS.map(f => {
+    const val = merged[f];
+    if (f === 'terms_accepted_at') {
+      return (val && val !== '') ? val : null;
+    }
+    if (f === 'attendance_break_enabled') {
+      return (val === 1 || val === '1' || val === true || val === 'true') ? 1 : 0;
+    }
+    if (['pf_enabled', 'esi_enabled', 'pt_enabled', 'lwf_enabled', 'emp_code_padding'].includes(f)) {
+      if (val === null || val === undefined || val === '') return f === 'emp_code_padding' ? 4 : 1;
+      return parseInt(val, 10);
+    }
+    return val ?? '';
+  });
+
   await db.run(`
     INSERT INTO organizations (${cols}, id, created_at)
     VALUES (${placeholders}, 'org_main', CURRENT_TIMESTAMP)
     ON CONFLICT(id) DO UPDATE SET ${setClause}
-  `, ...SETTINGS_FIELDS.map(f => merged[f] ?? ''));
+  `, ...values);
 
   return getSettings();
 }

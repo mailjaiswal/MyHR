@@ -7,8 +7,8 @@ tests/
 scripts/
 
 # Build output & cache
-client/dist/
-dist/
+
+
 .vercel/
 
 # Environments

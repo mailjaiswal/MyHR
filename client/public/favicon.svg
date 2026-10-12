@@ -1,4 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
-  <rect width="48" height="48" rx="14" fill="#10b981"/>
-  <path d="M12 24h6l4-10 6 20 4-10h6" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 68 84" fill="none">
+  <defs>
+    <mask id="favMask">
+      <rect width="68" height="84" fill="white"/>
+      <circle cx="53" cy="67" r="18" fill="black"/>
+    </mask>
+  </defs>
+  <!-- Card Background -->
+  <rect x="2" y="2" width="64" height="80" rx="14" fill="#0F172A" stroke="#10B981" stroke-width="4" mask="url(#favMask)"/>
+  <!-- Personnel Silhouette -->
+  <circle cx="34" cy="27" r="9" fill="#10B981" mask="url(#favMask)"/>
+  <path d="M 18 52 C 18 41, 50 41, 50 52 Z" fill="#10B981" mask="url(#favMask)"/>
+  <!-- Verified Badge -->
+  <circle cx="53" cy="67" r="14" fill="#10B981" stroke="#0F172A" stroke-width="2.5"/>
+  <path d="M 47 67 L 51 71 L 59 63" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

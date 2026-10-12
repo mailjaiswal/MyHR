@@ -2,13 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Building2, Save, Loader2, Settings2, Hourglass, Cpu, Pencil, X, Check, Plus,
   CalendarClock, ShieldCheck, Users, ChevronRight, Layers, KeyRound, Trash2, Network,
-  Bell, Mail, Send, Inbox, Hash,
-  DatabaseBackup, Play, Download, RotateCcw, UploadCloud
+  Mail, Send, Inbox, Hash, FileText, Eye, ScrollText, CloudUpload,
+  DatabaseBackup, Play, Download, RotateCcw, UploadCloud,
+  Search, ArrowLeft, Timer, Gavel, CalendarDays, Scale
 } from 'lucide-react';
 import { useOrganization } from '../context/OrganizationContext';
 import { useAuth } from '../context/AuthContext';
 import useEscapeClose from '../hooks/useEscapeClose';
 import DataSources from './DataSources';
+import { AttendanceRulesSection, OvertimeRulesSection, HolidaysSection, StatutorySection } from '../components/RulesCenter';
 
 const FIELDS = ['name', 'tagline', 'industry_label', 'address', 'contact_person', 'director_name', 'director_title', 'contact_phone', 'contact_email', 'gstin', 'registration_no'];
 
@@ -16,7 +18,9 @@ const FIELDS = ['name', 'tagline', 'industry_label', 'address', 'contact_person'
 // because both values must be normalised before they reach the API.
 const sanitizeIdPrefix = (v) => String(v ?? '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8);
 const clampIdPadding = (v) => Math.min(6, Math.max(3, parseInt(v, 10) || 4));
-const ROLES = { SUPER_ADMIN: 'Super Admin', ADMIN: 'Admin', EMPLOYEE: 'Employee' };
+const ROLES = { SUPER_ADMIN: 'Super Admin', ADMIN: 'Administrator', MANAGER: 'Manager', EMPLOYEE: 'Employee' };
+// Assignable from company screens only — SUPER_ADMIN is reserved for the single platform owner.
+const ASSIGNABLE_ROLES = { ADMIN: 'Administrator', MANAGER: 'Manager', EMPLOYEE: 'Employee' };
 const DATA_SCOPES = ['SELF', 'TEAM', 'DEPARTMENT', 'ALL'];
 const ALL_PERMS = [
   'DASHBOARD_VIEW', 'ATTENDANCE_VIEW', 'ATTENDANCE_EDIT', 'REGULARIZATION_APPROVE',
@@ -25,26 +29,39 @@ const ALL_PERMS = [
   'SETTINGS_VIEW', 'SETTINGS_EDIT', 'ACCESS_MANAGE', 'EXPORTS', 'DEMO_LAB', 'AUDIT_VIEW'
 ];
 
+// Every admin surface in one place, grouped the way an HR head thinks about it
+// (Rules-first, PagarGuru-style). `group` drives the hub cards, `keywords` powers
+// the hub search so any setting is one keystroke away regardless of grouping.
 const TABS = [
-  { key: 'company', label: 'Company', icon: Building2 },
-  { key: 'roster', label: 'Shift Roster', icon: Hourglass },
-  { key: 'roles', label: 'Roles', icon: ShieldCheck },
-  { key: 'leaves', label: 'Leave Policy', icon: CalendarClock },
-  { key: 'access', label: 'Access Management', icon: Network, perm: 'ACCESS_MANAGE' },
-  { key: 'notifications', label: 'Notifications & Audit', icon: Bell, perm: 'SETTINGS_VIEW' },
-  { key: 'ingestion', label: 'Data Ingestion', icon: UploadCloud, perm: 'SETTINGS_VIEW' },
-  { key: 'backup', label: 'Backup & Recovery', icon: DatabaseBackup, perm: 'SETTINGS_VIEW' }
+  { key: 'company', label: 'Company Profile', icon: Building2, group: 'Workspace', desc: 'Name, branding, address, statutory toggles and employee ID format.', keywords: 'company name address gstin registration industry tagline director contact pf esi pt state code prefix id branding logo' },
+  { key: 'roles', label: 'Role Assignment', icon: ShieldCheck, group: 'People & Access', desc: 'Give each employee their Administrator / Manager / Employee role.', keywords: 'role assign employee manager admin designation' },
+  { key: 'access', label: 'Access Management', icon: Network, group: 'People & Access', perm: 'ACCESS_MANAGE', desc: 'Define what each role can see and do — permissions & data scope.', keywords: 'permissions scope access manage role define custom create delete matrix' },
+  { key: 'rules_attendance', label: 'Attendance Rules', icon: Timer, group: 'Rules Center', desc: 'Late grace, half-day and full-day thresholds for day classification.', keywords: 'grace late early half day absent threshold attendance rule rounding' },
+  { key: 'rules_overtime', label: 'Overtime Policy', icon: Gavel, group: 'Rules Center', desc: 'OT tiers plus weekday, week-off and holiday multipliers.', keywords: 'overtime ot multiplier tier weekend weekoff holiday rate policy' },
+  { key: 'leaves', label: 'Leave Policy', icon: CalendarClock, group: 'Rules Center', desc: 'Leave types, annual allowances, carry-forward and balances.', keywords: 'leave type allowance carry forward balance casual sick earned privilege' },
+  { key: 'holidays', label: 'Holiday Calendar', icon: CalendarDays, group: 'Rules Center', desc: 'Public, company and regional holiday dates per year.', keywords: 'holiday public regional company diwali holi christmas calendar date' },
+  { key: 'roster', label: 'Shifts & Roster', icon: Hourglass, group: 'Rules Center', desc: 'Shift timings and day-by-day employee rostering.', keywords: 'shift roster timing start end break duration night duty schedule' },
+  { key: 'rules_statutory', label: 'Statutory Rates', icon: Scale, group: 'Payroll & Compliance', desc: 'EPF, ESIC and Professional Tax math used by payroll.', keywords: 'epf pf esi esic pt professional tax ceiling slab statutory rate provident fund' },
+  { key: 'notifications', label: 'Emails & Templates', icon: Inbox, group: 'Operations', perm: 'SETTINGS_VIEW', desc: 'SMTP setup, event alerts and the offer-letter email template.', keywords: 'email smtp notification alert offer letter template subject body checklist outbox' },
+  { key: 'audit_logs', label: 'Audit & Logs', icon: ScrollText, group: 'Operations', perm: 'SETTINGS_VIEW', desc: 'Notification delivery log and how long the audit trail is kept.', keywords: 'audit retention log trail notification sent failed email history purge' },
+  { key: 'ingestion', label: 'Data Ingestion', icon: UploadCloud, group: 'Operations', perm: 'SETTINGS_VIEW', desc: 'Biometric devices, sync sources and imports.', keywords: 'device biometric machine sync import punch source zkt essl' },
+  { key: 'backup', label: 'Backup & Recovery', icon: DatabaseBackup, group: 'Operations', perm: 'SETTINGS_VIEW', desc: 'Database backup jobs, downloads and restore.', keywords: 'backup restore recovery download database' }
 ];
+
+const GROUP_ORDER = ['Workspace', 'People & Access', 'Rules Center', 'Payroll & Compliance', 'Operations'];
 
 export default function Settings({ initialTab, onNavigate }) {
   const { org, refreshOrg } = useOrganization();
   const { user, authFetch, hasPerm } = useAuth();
   const api = useCallback((path, opts = {}) => authFetch(path, opts).then(r => r.json()).then(d => (d.success ? d : { success: false, error: d.error })), [authFetch]);
   const [tab, setTab] = useState(initialTab?.tab || 'company');
+  // 'hub' = card landing (admin home); 'section' = one settings surface open.
+  const [view, setView] = useState(initialTab?.tab ? 'section' : 'hub');
+  const [hubQuery, setHubQuery] = useState('');
 
   // Allow other pages to deep-link us to a specific tab.
   useEffect(() => {
-    if (initialTab?.tab) setTab(initialTab.tab);
+    if (initialTab?.tab) { setTab(initialTab.tab); setView('section'); }
   }, [initialTab]);
 
   const [settings, setSettings] = useState(null);
@@ -83,6 +100,8 @@ export default function Settings({ initialTab, onNavigate }) {
       FIELDS.forEach(f => { if (settings[f] !== undefined) body[f] = settings[f]; });
       body.emp_code_prefix = sanitizeIdPrefix(settings.emp_code_prefix);
       body.emp_code_padding = clampIdPadding(settings.emp_code_padding);
+      body.attendance_break_enabled = settings.attendance_break_enabled ? 1 : 0;
+      body.weekly_off_days = String(settings.weekly_off_days ?? '0,6');
       const d = await api('/api/v1/organization/settings', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -91,6 +110,59 @@ export default function Settings({ initialTab, onNavigate }) {
       else alert(d.error || 'Failed to save');
     } catch (err) { alert(err.message); }
     finally { setSaving(false); }
+  };
+
+  // ── Departments (Company tab) ──
+  const [editingDeptId, setEditingDeptId] = useState(null);
+  const [deptForm, setDeptForm] = useState({ name: '', code: '' });
+  const [isAddingDept, setIsAddingDept] = useState(false);
+  const [newDeptForm, setNewDeptForm] = useState({ name: '', code: '' });
+
+  const startEditDept = (d) => {
+    setEditingDeptId(d.id);
+    setDeptForm({ name: d.name || '', code: d.code || '' });
+  };
+
+  const saveEditDept = async (id) => {
+    try {
+      const d = await api(`/api/v1/organization/departments/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(deptForm)
+      });
+      if (d.success) { flash(`Department '${deptForm.name}' updated`); load(); setEditingDeptId(null); }
+      else alert(d.error || 'Failed to update department');
+    } catch (err) { alert(err.message); }
+  };
+
+  const createDept = async () => {
+    if (!newDeptForm.name.trim()) return alert('Department name is required');
+    try {
+      const d = await api('/api/v1/organization/departments', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newDeptForm)
+      });
+      if (d.success) {
+        flash(`Department '${newDeptForm.name}' created`);
+        load();
+        setIsAddingDept(false);
+        setNewDeptForm({ name: '', code: '' });
+      } else {
+        alert(d.error || 'Failed to create department');
+      }
+    } catch (err) { alert(err.message); }
+  };
+
+  const deleteDept = async (d) => {
+    if (d.employee_count > 0) {
+      alert(`Cannot delete '${d.name}': ${d.employee_count} employee(s) are currently assigned to it. Reassign them first.`);
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to delete department '${d.name}'?`)) return;
+    try {
+      const res = await api(`/api/v1/organization/departments/${d.id}`, { method: 'DELETE' });
+      if (res.success) { flash(`Department '${d.name}' deleted`); load(); }
+      else alert(res.message || res.error || 'Failed to delete');
+    } catch (err) { alert(err.message); }
   };
 
   // ── Shift timings (Company tab) ──
@@ -312,7 +384,7 @@ export default function Settings({ initialTab, onNavigate }) {
     if (d.success) { setOutbox(d.entries); setOutboxCounts(d.counts); }
   }, [api]);
 
-  useEffect(() => { if (tab === 'notifications' && hasPerm('SETTINGS_VIEW')) { loadNotif(); loadOutbox(outboxFilter); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tab]);
+  useEffect(() => { if (['notifications', 'audit_logs'].includes(tab) && hasPerm('SETTINGS_VIEW')) { loadNotif(); loadOutbox(outboxFilter); loadOnboardingTpl(); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tab]);
 
   const toggleEvent = (ev) => setNotif(n => n ? { ...n, event_prefs: { ...n.event_prefs, [ev]: !(n.event_prefs[ev] !== false) } } : n);
 
@@ -356,34 +428,146 @@ export default function Settings({ initialTab, onNavigate }) {
     } catch (err) { alert(err.message); } finally { setNotifBusy(null); }
   };
 
+  // ── Onboarding Email Template Editor ──
+  const [onboardingTpl, setOnboardingTpl] = useState(null);
+  const [newChecklistItem, setNewChecklistItem] = useState('');
+  const [previewHtml, setPreviewHtml] = useState(null);
+  const [showTplPreview, setShowTplPreview] = useState(false);
+  const [savingTpl, setSavingTpl] = useState(false);
+
+  const loadOnboardingTpl = useCallback(async () => {
+    const d = await api('/api/v1/notifications/templates/employee.onboarding_welcome');
+    if (d.success) setOnboardingTpl(d.template);
+  }, [api]);
+
+  const saveOnboardingTpl = async () => {
+    if (!onboardingTpl) return;
+    setSavingTpl(true);
+    try {
+      const d = await api('/api/v1/notifications/templates/employee.onboarding_welcome', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: onboardingTpl.subject,
+          body_html: onboardingTpl.body_html,
+          checklist_items: onboardingTpl.checklist_items
+        })
+      });
+      if (d.success) flash('Onboarding email template saved');
+      else alert(d.error || 'Failed to save template');
+    } catch (err) { alert(err.message); }
+    finally { setSavingTpl(false); }
+  };
+
+  const addChecklistItem = () => {
+    const item = newChecklistItem.trim();
+    if (!item) return;
+    setOnboardingTpl(t => t ? { ...t, checklist_items: [...(t.checklist_items || []), item] } : t);
+    setNewChecklistItem('');
+  };
+
+  const removeChecklistItem = (index) => {
+    setOnboardingTpl(t => t ? { ...t, checklist_items: (t.checklist_items || []).filter((_, i) => i !== index) } : t);
+  };
+
+  const previewTemplate = async () => {
+    try {
+      const d = await api('/api/v1/notifications/templates/employee.onboarding_welcome/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if (d.success) {
+        setPreviewHtml(d.html);
+        setShowTplPreview(true);
+      } else alert(d.error || 'Failed to generate preview');
+    } catch (err) { alert(err.message); }
+  };
+
+  const insertVariable = (varTag) => {
+    setOnboardingTpl(t => t ? { ...t, body_html: (t.body_html || '') + ` ${varTag}` } : t);
+  };
+
   const OUTBOX_PILL = { SENT: 'status-ok', FAILED: 'status-bad', PENDING: 'status-warn' };
 
   // ── Backup & Recovery tab ──
-  const [backup, setBackup] = useState(null); // { backup_enabled, backup_retention_count, bucket, configured }
+  const [backup, setBackup] = useState(null); // { backup_enabled, backup_retention_count, bucket, configured, target, categories, storage }
   const [backups, setBackups] = useState([]);
   const [backupCounts, setBackupCounts] = useState({ ok: 0, failed: 0 });
   const [backupBusy, setBackupBusy] = useState(null);
   const [restoreTarget, setRestoreTarget] = useState(null); // { id, confirm }
+  const [storageCatDefs, setStorageCatDefs] = useState([]); // [{ key, label, desc }] from GET /backup/categories
+  // Client-owned cloud-storage destination (secret never comes back from the API).
+  const [storageForm, setStorageForm] = useState({ endpoint: '', region: '', bucket: '', access_key: '', secret: '', secret_set: false });
 
   // Escape closes the restore-confirmation popup.
   useEscapeClose(!!restoreTarget, () => setRestoreTarget(null));
 
   const loadBackup = useCallback(async () => {
     const s = await api('/api/v1/backup/settings');
-    if (s.success) setBackup(s);
+    if (s.success) {
+      setBackup(s);
+      setStorageForm(f => ({ ...f, endpoint: s.storage?.endpoint || '', region: s.storage?.region || '', bucket: s.storage?.bucket || '', access_key: s.storage?.access_key || '', secret: '', secret_set: !!s.storage?.secret_set }));
+    }
     const l = await api('/api/v1/backup');
     if (l.success) { setBackups(l.entries); setBackupCounts(l.counts); }
   }, [api]);
-  useEffect(() => { if (tab === 'backup' && hasPerm('SETTINGS_VIEW')) loadBackup(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tab]);
+  useEffect(() => { if (tab === 'backup' && hasPerm('SETTINGS_VIEW')) { loadBackup(); api('/api/v1/backup/categories').then(c => c.success && setStorageCatDefs(c.categories)); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tab]);
 
   const saveBackupSettings = async () => {
     setBackupBusy('save');
     try {
       const d = await api('/api/v1/backup/settings', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ backup_enabled: backup.backup_enabled, backup_retention_count: Number(backup.backup_retention_count) })
+        body: JSON.stringify({
+          backup_enabled: backup.backup_enabled,
+          backup_retention_count: Number(backup.backup_retention_count),
+          categories: backup.categories || []
+        })
       });
       if (d.success) { flash('Backup settings saved'); loadBackup(); } else alert(d.error || d.message || 'Failed to save');
+    } catch (err) { alert(err.message); } finally { setBackupBusy(null); }
+  };
+
+  const toggleBackupCategory = (key) => {
+    setBackup(b => b ? { ...b, categories: (b.categories || []).includes(key) ? b.categories.filter(k => k !== key) : [...(b.categories || []), key] } : b);
+  };
+
+  const saveStorageSettings = async ({ clear = false } = {}) => {
+    setBackupBusy('storage');
+    try {
+      const body = clear
+        ? { clear_storage: true }
+        : {
+            storage_endpoint: storageForm.endpoint.trim(),
+            storage_region: storageForm.region.trim() || 'us-east-1',
+            storage_bucket: storageForm.bucket.trim(),
+            storage_access_key: storageForm.access_key.trim(),
+            ...(storageForm.secret ? { storage_secret: storageForm.secret } : {})
+          };
+      const d = await api('/api/v1/backup/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+      });
+      if (d.success) { flash(clear ? 'Cloud storage removed' : 'Cloud storage saved'); setStorageForm(f => ({ ...f, secret: '' })); loadBackup(); }
+      else alert(d.error || d.message || 'Failed to save');
+    } catch (err) { alert(err.message); } finally { setBackupBusy(null); }
+  };
+
+  const testStorageNow = async () => {
+    setBackupBusy('test');
+    try {
+      const d = await api('/api/v1/backup/test-storage', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storage_endpoint: storageForm.endpoint.trim(),
+          storage_region: storageForm.region.trim() || 'us-east-1',
+          storage_bucket: storageForm.bucket.trim(),
+          storage_access_key: storageForm.access_key.trim(),
+          ...(storageForm.secret ? { storage_secret: storageForm.secret } : {})
+        })
+      });
+      if (d.success) flash(`Connection OK — wrote and read a test object in ${d.bucket}`);
+      else alert(d.message || d.error || 'Connection test failed');
     } catch (err) { alert(err.message); } finally { setBackupBusy(null); }
   };
 
@@ -436,13 +620,58 @@ export default function Settings({ initialTab, onNavigate }) {
       <div className="page-head">
         <div className="page-title-wrap">
           <h1>Admin Panel</h1>
-          <span className="page-desc">Shift rostering, employee roles, leave policy control and company settings.</span>
+          <span className="page-desc">Company setup, roles and the Rules Center — policies for attendance, overtime, leave, holidays and statutory payroll.</span>
         </div>
         <div className="page-actions">
-          <button className="btn btn-primary" onClick={saveSettings} disabled={saving || !settings}>
-            {saving ? <Loader2 size={15} className="spin" /> : saved ? <Check size={15} /> : <Save size={15} />} {saved ? 'Saved' : 'Save company'}
-          </button>
+          {view === 'section' && tab === 'company' && (
+            <button className="btn btn-primary" onClick={saveSettings} disabled={saving || !settings}>
+              {saving ? <Loader2 size={15} className="spin" /> : saved ? <Check size={15} /> : <Save size={15} />} {saved ? 'Saved' : 'Save company'}
+            </button>
+          )}
         </div>
+      </div>
+
+      {view === 'hub' ? (
+        <div className="admin-hub">
+          <div className="admin-hub-search">
+            <Search size={15} />
+            <input className="input" placeholder="Search settings — try 'grace', 'overtime', 'holiday', 'esic'…" value={hubQuery} onChange={e => setHubQuery(e.target.value)} />
+            {hubQuery && <button className="btn btn-ghost" style={{ padding: '0.25rem 0.5rem' }} onClick={() => setHubQuery('')}><X size={14} /></button>}
+          </div>
+          {(() => {
+            const q = hubQuery.trim().toLowerCase();
+            const visible = TABS.filter(t => !t.perm || hasPerm(t.perm)).filter(t =>
+              !q || `${t.label} ${t.desc} ${t.keywords}`.toLowerCase().includes(q));
+            if (!visible.length) {
+              return <div className="loading-state" style={{ padding: '2rem' }}><p>No settings match “{hubQuery}”.</p></div>;
+            }
+            return GROUP_ORDER.map(group => {
+              const items = visible.filter(t => t.group === group);
+              if (!items.length) return null;
+              return (
+                <div key={group} className="admin-hub-group">
+                  <div className="admin-hub-group-label">{group}</div>
+                  <div className="admin-hub-grid">
+                    {items.map(t => (
+                      <button key={t.key} className="admin-hub-card" onClick={() => { setTab(t.key); setView('section'); }}>
+                        <span className="admin-hub-card-icon"><t.icon size={18} /></span>
+                        <span className="admin-hub-card-body">
+                          <span className="admin-hub-card-label">{t.label}</span>
+                          <span className="admin-hub-card-desc">{t.desc}</span>
+                        </span>
+                        <ChevronRight size={16} className="admin-hub-card-arrow" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      ) : (
+        <>
+      <div className="admin-hub-backrow">
+        <button className="btn btn-ghost" onClick={() => setView('hub')}><ArrowLeft size={14} /> Admin home</button>
       </div>
 
       <div className="seg">
@@ -515,11 +744,202 @@ export default function Settings({ initialTab, onNavigate }) {
             )}
           </section>
 
+          <section className="section-card">
+            <div className="section-head">
+              <span className="section-title"><FileText size={16} /> Attendance In/Out report</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-caption)' }}>Shapes the Excel attendance export</span>
+            </div>
+            {!settings ? <div className="loading-state"><Loader2 size={22} className="spin" /></div> : (
+              <div className="section-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: hasPerm('SETTINGS_EDIT') ? 'pointer' : 'default', fontSize: '0.8125rem', color: 'var(--text-body)' }}>
+                    <input
+                      type="checkbox"
+                      style={{ accentColor: 'var(--brand-primary, #10b981)', marginTop: '2px' }}
+                      disabled={!hasPerm('SETTINGS_EDIT')}
+                      checked={Number(settings.attendance_break_enabled) === 1}
+                      onChange={e => setSettings({ ...settings, attendance_break_enabled: e.target.checked ? 1 : 0 })}
+                    />
+                    <span>
+                      <b>Fill Break Hours from shift</b>
+                      <br />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-caption)' }}>
+                        When off (default), the report’s “Break Hour” row and “Break Hours” total stay blank — the system has no per-day break punches.
+                        When on, each present day uses the employee’s shift break duration.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+                <div>
+                  <span className="eyebrow" style={{ display: 'block', marginBottom: '0.4rem' }}>Weekly-off days (counted when no attendance record exists)</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1rem' }}>
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((lbl, day) => {
+                      const on = String(settings.weekly_off_days ?? '0,6').split(',').map(s => parseInt(s.trim(), 10)).includes(day);
+                      return (
+                        <label key={day} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.7813rem', color: 'var(--text-body)', cursor: hasPerm('SETTINGS_EDIT') ? 'pointer' : 'default' }}>
+                          <input
+                            type="checkbox"
+                            style={{ accentColor: 'var(--brand-primary, #10b981)' }}
+                            disabled={!hasPerm('SETTINGS_EDIT')}
+                            checked={on}
+                            onChange={() => {
+                              const cur = new Set(String(settings.weekly_off_days ?? '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isInteger(n)));
+                              cur.has(day) ? cur.delete(day) : cur.add(day);
+                              setSettings({ ...settings, weekly_off_days: [...cur].sort((a, b) => a - b).join(',') });
+                            }}
+                          />
+                          <span>{lbl}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
           <div className="dash-grid dg-even">
+
             <section className="section-card">
-              <div className="section-head"><span className="section-title"><Layers size={16} /> Departments</span><span style={{ fontSize: '0.75rem', color: 'var(--text-caption)' }}>{departments.length}</span></div>
-              <div className="section-body" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                {departments.map(d => <span key={d.id} className="status-pill status-muted" style={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem' }}>{d.name}</span>)}
+              <div className="section-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span className="section-title"><Layers size={16} /> Departments</span>
+                  <span className="pill-badge pill-indigo" style={{ fontSize: '0.6875rem' }}>{departments.length} total</span>
+                </div>
+                {hasPerm('SETTINGS_EDIT') && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => { setIsAddingDept(!isAddingDept); setNewDeptForm({ name: '', code: '' }); }}
+                    style={{ fontSize: '0.75rem', gap: '0.35rem' }}
+                  >
+                    <Plus size={14} /> Add department
+                  </button>
+                )}
+              </div>
+
+              {isAddingDept && (
+                <div style={{ padding: '0.875rem 1.25rem', background: 'var(--bg-surface-subtle)', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '0.625rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Department Name (e.g. ICU, Finance)"
+                    value={newDeptForm.name}
+                    onChange={e => setNewDeptForm({ ...newDeptForm, name: e.target.value })}
+                    style={{ flex: '1 1 180px', fontSize: '0.75rem' }}
+                    autoFocus
+                  />
+                  <input
+                    type="text"
+                    className="input mono"
+                    placeholder="Code (optional)"
+                    value={newDeptForm.code}
+                    onChange={e => setNewDeptForm({ ...newDeptForm, code: e.target.value.toUpperCase() })}
+                    style={{ width: '110px', fontSize: '0.75rem' }}
+                  />
+                  <button type="button" className="btn btn-primary btn-sm" onClick={createDept} style={{ fontSize: '0.75rem' }}>
+                    <Check size={14} /> Create
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsAddingDept(false)} style={{ fontSize: '0.75rem' }}>
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
+              <div className="section-body" style={{ padding: '0.75rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '360px', overflowY: 'auto' }}>
+                {departments.map(d => {
+                  const isEditing = editingDeptId === d.id;
+                  const count = d.employee_count ?? 0;
+                  return (
+                    <div
+                      key={d.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.55rem 0.75rem',
+                        borderRadius: '8px',
+                        background: 'var(--bg-surface-subtle)',
+                        border: '1px solid var(--border-color)',
+                        gap: '0.5rem',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {isEditing ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, flexWrap: 'wrap' }}>
+                          <input
+                            type="text"
+                            className="input"
+                            value={deptForm.name}
+                            onChange={e => setDeptForm({ ...deptForm, name: e.target.value })}
+                            style={{ flex: '1 1 140px', fontSize: '0.75rem' }}
+                          />
+                          <input
+                            type="text"
+                            className="input mono"
+                            value={deptForm.code || ''}
+                            onChange={e => setDeptForm({ ...deptForm, code: e.target.value.toUpperCase() })}
+                            placeholder="CODE"
+                            style={{ width: '90px', fontSize: '0.75rem' }}
+                          />
+                          <div style={{ display: 'flex', gap: '0.35rem' }}>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => saveEditDept(d.id)} title="Save changes">
+                              <Check size={14} />
+                            </button>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditingDeptId(null)} title="Cancel">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', minWidth: 0 }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--text-heading)' }}>
+                              {d.name}
+                            </span>
+                            {d.code && (
+                              <span className="mono" style={{ fontSize: '0.6875rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: 'var(--border-color)', color: 'var(--text-caption)' }}>
+                                {d.code}
+                              </span>
+                            )}
+                            <span style={{ fontSize: '0.6875rem', color: count > 0 ? 'var(--brand-primary-ink)' : 'var(--text-muted)', fontWeight: 500 }}>
+                              {count} {count === 1 ? 'employee' : 'employees'}
+                            </span>
+                          </div>
+
+                          {hasPerm('SETTINGS_EDIT') && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => startEditDept(d)}
+                                title="Edit department name/code"
+                                style={{ padding: '0.25rem 0.45rem' }}
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-rose btn-sm"
+                                onClick={() => deleteDept(d)}
+                                disabled={count > 0}
+                                title={count > 0 ? `Cannot delete: ${count} employee(s) assigned` : 'Delete department'}
+                                style={{ padding: '0.25rem 0.45rem', opacity: count > 0 ? 0.35 : 1, cursor: count > 0 ? 'not-allowed' : 'pointer' }}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+                {departments.length === 0 && (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
+                    No departments added yet.
+                  </p>
+                )}
               </div>
             </section>
 
@@ -696,7 +1116,7 @@ export default function Settings({ initialTab, onNavigate }) {
                       <td>
                         <select className="input" style={{ width: 150 }} value={e.role} disabled={isSelf || busy === e.id}
                           onChange={ev => changeRole(e.id, ev.target.value)}>
-                          {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                          {Object.entries(ASSIGNABLE_ROLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                         </select>
                       </td>
                     </tr>
@@ -954,7 +1374,7 @@ export default function Settings({ initialTab, onNavigate }) {
         </div>
       )}
 
-      {/* ── Tab: Notifications & Audit ── */}
+      {/* ── Tab: Emails & Templates ── */}
       {tab === 'notifications' && hasPerm('SETTINGS_VIEW') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {!notif ? <div className="loading-state"><Loader2 size={22} className="spin" /></div> : (
@@ -1016,25 +1436,229 @@ export default function Settings({ initialTab, onNavigate }) {
                 )}
               </section>
 
+              {/* ── Onboarding Offer Letter & Document Checklist Template ── */}
               <section className="section-card">
-                <div className="section-head">
-                  <span className="section-title"><ShieldCheck size={16} /> Audit retention</span>
-                </div>
-                <div className="section-body" style={{ display: 'flex', gap: '0.625rem', alignItems: 'end', flexWrap: 'wrap' }}>
-                  <div className="field" style={{ width: 180 }}>
-                    <label className="field-label">Keep entries for (days)</label>
-                    <input className="input" type="number" min="1" max="3650" disabled={!canEditNotif} value={retention} onChange={e => setRetention(e.target.value)} />
+                <div className="section-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="section-title"><FileText size={16} /> Onboarding Offer Letter &amp; Document Checklist Template</span>
+                    <span className="pill-badge pill-indigo" style={{ fontSize: '0.6875rem' }}>OFFER PACK</span>
                   </div>
-                  {canEditNotif && (
-                    <button className="btn btn-ghost btn-sm" onClick={saveRetention} disabled={notifBusy === 'retention'}>
-                      {notifBusy === 'retention' ? <Loader2 size={14} className="spin" /> : <Check size={14} />} Save
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={previewTemplate}
+                      style={{ fontSize: '0.75rem', gap: '0.35rem' }}
+                    >
+                      <Eye size={14} /> Preview branded email
                     </button>
-                  )}
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-caption)' }}>Default is 365 days (1 year). Older audit entries are purged automatically.</span>
+                    {canEditNotif && (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={saveOnboardingTpl}
+                        disabled={savingTpl}
+                        style={{ fontSize: '0.75rem', gap: '0.35rem' }}
+                      >
+                        {savingTpl ? <Loader2 size={14} className="spin" /> : <Save size={14} />} Save template
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {!onboardingTpl ? (
+                  <div className="loading-state"><Loader2 size={20} className="spin" /><p>Loading template…</p></div>
+                ) : (
+                  <div className="section-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="field">
+                      <label className="field-label">Email Subject</label>
+                      <input
+                        className="input"
+                        disabled={!canEditNotif}
+                        value={onboardingTpl.subject || ''}
+                        onChange={e => setOnboardingTpl({ ...onboardingTpl, subject: e.target.value })}
+                        placeholder="Offer of Employment & Onboarding Checklist — {{company_name}}"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="field-label" style={{ marginBottom: '0.4rem' }}>
+                        Insert Dynamic Field Placeholders:
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                        {[
+                          ['Candidate Name', '{{employee_name}}'],
+                          ['Designation', '{{designation}}'],
+                          ['Department', '{{department}}'],
+                          ['Date of Joining', '{{date_of_joining}}'],
+                          ['Base CTC', '{{base_ctc}}'],
+                          ['Company Name', '{{company_name}}'],
+                          ['HR Contact', '{{contact_person}}'],
+                          ['HR Email', '{{contact_email}}']
+                        ].map(([label, tag]) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={!canEditNotif}
+                            onClick={() => insertVariable(tag)}
+                            style={{
+                              fontSize: '0.6875rem',
+                              padding: '0.2rem 0.5rem',
+                              background: 'var(--bg-surface-subtle)',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '6px'
+                            }}
+                            title={`Insert ${tag}`}
+                          >
+                            <span style={{ color: 'var(--brand-primary-ink)', fontWeight: 600 }}>{tag}</span>
+                            <span style={{ color: 'var(--text-caption)', fontSize: '0.625rem', marginLeft: 4 }}>({label})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="field">
+                      <label className="field-label">Offer Letter Message (HTML / Text)</label>
+                      <textarea
+                        className="input mono"
+                        rows={6}
+                        disabled={!canEditNotif}
+                        value={onboardingTpl.body_html || ''}
+                        onChange={e => setOnboardingTpl({ ...onboardingTpl, body_html: e.target.value })}
+                        style={{ fontSize: '0.8125rem', lineHeight: 1.5, resize: 'vertical' }}
+                      />
+                      <span style={{ fontSize: '0.6875rem', color: 'var(--text-caption)', marginTop: '0.25rem' }}>
+                        Supports HTML tags (e.g. &lt;strong&gt;, &lt;br&gt;, &lt;p&gt;) and placeholder tokens above.
+                      </span>
+                    </div>
+
+                    <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.875rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                        <div>
+                          <div className="field-label" style={{ margin: 0 }}>Required Document Checklist Items</div>
+                          <span style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }}>
+                            Documents the candidate must submit or bring on Day 1.
+                          </span>
+                        </div>
+                        <span className="pill-badge pill-indigo" style={{ fontSize: '0.6875rem' }}>
+                          {(onboardingTpl.checklist_items || []).length} items
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginBottom: '0.75rem' }}>
+                        {(onboardingTpl.checklist_items || []).map((item, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '0.45rem 0.75rem',
+                              background: 'var(--bg-surface-subtle)',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '6px',
+                              gap: '0.5rem'
+                            }}
+                          >
+                            <span style={{ fontSize: '0.7813rem', color: 'var(--text-heading)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                              <span style={{ color: 'var(--brand-primary-ink)', fontWeight: 'bold' }}>✔</span> {item}
+                            </span>
+                            {canEditNotif && (
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                onClick={() => removeChecklistItem(idx)}
+                                title="Remove item"
+                                style={{ color: 'var(--danger-ink)', padding: '0.2rem' }}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {canEditNotif && (
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            className="input"
+                            placeholder="Add required document (e.g. Medical Fitness Certificate, Passport Copy)..."
+                            value={newChecklistItem}
+                            onChange={e => setNewChecklistItem(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(); } }}
+                            style={{ fontSize: '0.7813rem', flex: 1 }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={addChecklistItem}
+                            style={{ fontSize: '0.75rem', gap: '0.35rem', whiteSpace: 'nowrap' }}
+                          >
+                            <Plus size={14} /> Add requirement
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </section>
+
+              {/* ── Live Email Preview Modal ── */}
+              {showTplPreview && (
+                <div className="modal-overlay" onClick={() => setShowTplPreview(false)} style={{ zIndex: 1000 }}>
+                  <div
+                    className="modal-card"
+                    style={{ maxWidth: '640px', width: '100%', padding: 0, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="modal-head" style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Mail size={16} style={{ color: 'var(--brand-primary-ink)' }} />
+                        <span style={{ fontWeight: 600, fontSize: '0.9375rem', color: 'var(--text-heading)' }}>
+                          Candidate Offer &amp; Checklist Preview
+                        </span>
+                      </div>
+                      <button className="icon-btn" onClick={() => setShowTplPreview(false)}><X size={16} /></button>
+                    </div>
+                    <div style={{ padding: '1rem', overflowY: 'auto', flex: 1, background: '#f1f5f9' }}>
+                      <div
+                        dangerouslySetInnerHTML={{ __html: previewHtml || '' }}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', background: 'var(--bg-surface)' }}>
+                      <button className="btn btn-primary btn-sm" onClick={() => setShowTplPreview(false)}>Done</button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Tab: Audit & Logs — notification delivery history + audit retention ── */}
+      {tab === 'audit_logs' && hasPerm('SETTINGS_VIEW') && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <section className="section-card">
+            <div className="section-head">
+              <span className="section-title"><ScrollText size={16} /> Audit retention</span>
+            </div>
+            <div className="section-body" style={{ display: 'flex', gap: '0.625rem', alignItems: 'end', flexWrap: 'wrap' }}>
+              <div className="field" style={{ width: 180 }}>
+                <label className="field-label">Keep entries for (days)</label>
+                <input className="input" type="number" min="1" max="3650" disabled={!canEditNotif} value={retention} onChange={e => setRetention(e.target.value)} />
+              </div>
+              {canEditNotif && (
+                <button className="btn btn-ghost btn-sm" onClick={saveRetention} disabled={notifBusy === 'retention'}>
+                  {notifBusy === 'retention' ? <Loader2 size={14} className="spin" /> : <Check size={14} />} Save
+                </button>
+              )}
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-caption)' }}>Default is 365 days (1 year). Older audit entries are purged automatically.</span>
+            </div>
+          </section>
 
           <section className="section-card">
             <div className="section-head">
@@ -1088,13 +1712,18 @@ export default function Settings({ initialTab, onNavigate }) {
               {!backup.configured && (
                 <div className="demo-banner" style={{ borderColor: 'rgba(245,158,11,.4)', background: 'var(--brand-amber-light)', color: 'var(--warning-ink)' }}>
                   <DatabaseBackup size={16} />
-                  <span>Backups are not wired to storage yet. Set <strong>SUPABASE_URL</strong> and <strong>SUPABASE_SERVICE_ROLE_KEY</strong> (and create a private <strong>{backup.bucket}</strong> bucket) on the server to enable off-site dumps.</span>
+                  <span>No backup destination yet. For data backup and disaster recovery, <strong>you provide the cloud credentials</strong> to any S3-compatible storage account (AWS S3, Cloudflare R2, Backblaze B2, MinIO…) and we deliver a daily dump <strong>straight to your server</strong> — your database copy never sits on ours. Add them under <strong>Your cloud storage</strong> below.</span>
                 </div>
               )}
 
+              <div className="demo-banner" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-surface-subtle)', color: 'var(--text-muted)' }}>
+                <CloudUpload size={16} />
+                <span>Daily dumps are delivered to <strong>your</strong> cloud account — we keep no copy of your database on our servers. Choose exactly which data leaves in each backup below.</span>
+              </div>
+
               <section className="section-card">
                 <div className="section-head">
-                  <span className="section-title"><DatabaseBackup size={16} /> Backup settings</span>
+                  <span className="section-title"><DatabaseBackup size={16} /> Backup schedule</span>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600, cursor: canEditNotif ? 'pointer' : 'default' }}>
                     <input type="checkbox" disabled={!canEditNotif} checked={!!backup.backup_enabled} onChange={e => setBackup({ ...backup, backup_enabled: e.target.checked })} /> Daily backups enabled
                   </label>
@@ -1114,8 +1743,66 @@ export default function Settings({ initialTab, onNavigate }) {
                       </button>
                     </>
                   )}
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-caption)' }}>Bucket: <span className="mono">{backup.bucket}</span> · {backupCounts.ok} stored · {backupCounts.failed} failed</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-caption)' }}>
+                    {backup.target === 's3' ? 'Destination: your bucket ' : 'Destination: platform storage '}
+                    <span className="mono">{backup.bucket}</span> · {backupCounts.ok} stored · {backupCounts.failed} failed
+                  </span>
                 </div>
+
+                <div className="section-body" style={{ borderTop: '1px solid var(--border-color)', marginTop: '0.5rem', paddingTop: '0.875rem' }}>
+                  <div className="field-label" style={{ marginBottom: '0.15rem' }}>What to include in each backup</div>
+                  <span style={{ fontSize: '0.7188rem', color: 'var(--text-caption)', display: 'block', marginBottom: '0.6rem' }}>
+                    Company settings, rules and shifts are always included so a restore lands on a working product. Everything else is your call.
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.45rem' }}>
+                    {storageCatDefs.map(c => {
+                      const on = (backup.categories || []).includes(c.key);
+                      return (
+                        <label key={c.key} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', padding: '0.5rem 0.65rem', background: 'var(--bg-surface-subtle)', border: `1px solid ${on ? 'var(--brand-primary)' : 'var(--border-color)'}`, borderRadius: 8, cursor: canEditNotif ? 'pointer' : 'default' }}>
+                          <input type="checkbox" disabled={!canEditNotif} checked={on} onChange={() => toggleBackupCategory(c.key)} style={{ marginTop: 2 }} />
+                          <span>
+                            <span style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-heading)' }}>{c.label}</span>
+                            <span style={{ display: 'block', fontSize: '0.6875rem', color: 'var(--text-caption)' }}>{c.desc}</span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+
+              <section className="section-card">
+                <div className="section-head">
+                  <span className="section-title"><CloudUpload size={16} /> Your cloud storage</span>
+                  {backup.target === 's3' && <span className="status-pill status-ok" style={{ textTransform: 'none', fontWeight: 600 }}>ACTIVE</span>}
+                </div>
+                <div className="section-body" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.875rem' }}>
+                  <div className="field" style={{ gridColumn: '1 / -1' }}>
+                    <label className="field-label">S3-compatible endpoint URL</label>
+                    <input className="input mono" disabled={!canEditNotif} placeholder="https://s3.eu-central-1.amazonaws.com  ·  https://&lt;acct&gt;.s3.wasabisys.com  ·  https://&lt;id&gt;.r2.cloudflarestorage.com" value={storageForm.endpoint} onChange={e => setStorageForm({ ...storageForm, endpoint: e.target.value })} />
+                    <span style={{ fontSize: '0.6875rem', color: 'var(--text-caption)' }}>AWS S3, Cloudflare R2, Backblaze B2, Wasabi, MinIO — anything that speaks the S3 API. Give the keys List/Write on this bucket only.</span>
+                  </div>
+                  <div className="field"><label className="field-label">Bucket</label><input className="input mono" disabled={!canEditNotif} value={storageForm.bucket} onChange={e => setStorageForm({ ...storageForm, bucket: e.target.value })} /></div>
+                  <div className="field"><label className="field-label">Region</label><input className="input mono" disabled={!canEditNotif} placeholder="us-east-1" value={storageForm.region} onChange={e => setStorageForm({ ...storageForm, region: e.target.value })} /></div>
+                  <div className="field"><label className="field-label">Access key ID</label><input className="input mono" disabled={!canEditNotif} value={storageForm.access_key} onChange={e => setStorageForm({ ...storageForm, access_key: e.target.value })} /></div>
+                  <div className="field"><label className="field-label">Secret access key</label><input className="input" type="password" disabled={!canEditNotif} placeholder={storageForm.secret_set ? '•••••••• (saved — type to replace)' : 'not set'} value={storageForm.secret} onChange={e => setStorageForm({ ...storageForm, secret: e.target.value })} /></div>
+                </div>
+                {canEditNotif && (
+                  <div className="section-body" style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap', alignItems: 'center', borderTop: '1px solid var(--border-color)', marginTop: '0.5rem', paddingTop: '0.875rem' }}>
+                    <button className="btn btn-primary btn-sm" onClick={() => saveStorageSettings()} disabled={backupBusy === 'storage'}>
+                      {backupBusy === 'storage' ? <Loader2 size={14} className="spin" /> : <Save size={14} />} Save storage
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={testStorageNow} disabled={backupBusy === 'test' || !storageForm.endpoint || !storageForm.bucket || !storageForm.access_key || (!storageForm.secret && !storageForm.secret_set)}>
+                      {backupBusy === 'test' ? <Loader2 size={14} className="spin" /> : <Play size={14} />} Test connection
+                    </button>
+                    {backup.target === 's3' && (
+                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger-ink)' }} onClick={() => window.confirm('Remove your storage details? Daily backups will pause until a destination is added again.') && saveStorageSettings({ clear: true })}>
+                        <Trash2 size={14} /> Remove storage
+                      </button>
+                    )}
+                    <span style={{ fontSize: '0.7188rem', color: 'var(--text-caption)' }}>Secrets are encrypted at rest and never shown again after saving.</span>
+                  </div>
+                )}
               </section>
 
               <section className="section-card">
@@ -1155,6 +1842,21 @@ export default function Settings({ initialTab, onNavigate }) {
             </>
           )}
         </div>
+      )}
+
+      {/* ── Tab: Rules Center — Attendance Rules ── */}
+      {tab === 'rules_attendance' && <AttendanceRulesSection />}
+
+      {/* ── Tab: Rules Center — Overtime Policy ── */}
+      {tab === 'rules_overtime' && <OvertimeRulesSection />}
+
+      {/* ── Tab: Rules Center — Holiday Calendar ── */}
+      {tab === 'holidays' && <HolidaysSection />}
+
+      {/* ── Tab: Payroll & Compliance — Statutory Rates ── */}
+      {tab === 'rules_statutory' && <StatutorySection />}
+
+        </>
       )}
 
       {/* Restore confirmation modal */}

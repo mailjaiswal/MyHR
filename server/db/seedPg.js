@@ -122,7 +122,7 @@ const ALL_PERMS = [
 async function seedRoles() {
   const roles = [
     { id: 'role_super', name: 'Super Admin', technical_key: 'SUPER_ADMIN', data_scope: 'ALL', permissions: ALL_PERMS, is_system: 1, sort_order: 1 },
-    { id: 'role_admin', name: 'HR Admin', technical_key: 'ADMIN', data_scope: 'ALL', permissions: ALL_PERMS.filter(p => p !== 'ACCESS_MANAGE'), is_system: 1, sort_order: 2 },
+    { id: 'role_admin', name: 'HR Admin', technical_key: 'ADMIN', data_scope: 'ALL', permissions: ALL_PERMS.filter(p => p !== 'DEMO_LAB'), is_system: 1, sort_order: 2 },
     { id: 'role_manager', name: 'Manager', technical_key: 'MANAGER', data_scope: 'TEAM', permissions: ['DASHBOARD_VIEW','ATTENDANCE_VIEW','ATTENDANCE_EDIT','REGULARIZATION_APPROVE','LEAVES_VIEW','LEAVES_REQUEST','LEAVES_APPROVE','ROSTER_VIEW','ROSTER_EDIT','EXPORTS','PAYROLL_VIEW','EMPLOYEES_VIEW'], is_system: 1, sort_order: 3 },
     { id: 'role_employee', name: 'Employee', technical_key: 'EMPLOYEE', data_scope: 'SELF', permissions: ['DASHBOARD_VIEW','ATTENDANCE_VIEW','LEAVES_VIEW','LEAVES_REQUEST','PAYROLL_VIEW','ROSTER_VIEW'], is_system: 1, sort_order: 4 }
   ];
@@ -137,7 +137,7 @@ async function seedRoles() {
 const ROLE_MAP = { SUPER_ADMIN: 'role_super', ADMIN: 'role_admin', MANAGER: 'role_manager', EMPLOYEE: 'role_employee' };
 
 const STAFF = [
-  { code: 'EMP-001', bio: '101', first: 'Aarav', last: 'Mehta', gender: 'Male', dept: 'dept_admin', shift: 'shift_gen', desig: 'Managing Director', role: 'SUPER_ADMIN', ctc: 140000, join: '2018-04-02', mobile: '9826000001', city: 'Chhindwara' },
+  { code: 'EMP-001', bio: '101', first: 'Aarav', last: 'Mehta', gender: 'Male', dept: 'dept_admin', shift: 'shift_gen', desig: 'Managing Director', role: 'ADMIN', ctc: 140000, join: '2018-04-02', mobile: '9826000001', city: 'Chhindwara' },
   { code: 'EMP-002', bio: '102', first: 'Priya', last: 'Sharma', gender: 'Female', dept: 'dept_it', shift: 'shift_gen', desig: 'HR Manager', role: 'ADMIN', ctc: 68000, join: '2019-06-17', mobile: '9826000002', city: 'Chhindwara' },
   { code: 'EMP-003', bio: '103', first: 'Anita', last: 'Nair', gender: 'Female', dept: 'dept_nursing', shift: 'shift_day', desig: 'Head Nurse', role: 'MANAGER', ctc: 52000, join: '2020-01-06', mobile: '9826000003', city: 'Chhindwara', mgr: 'emp_102' },
   { code: 'EMP-004', bio: '104', first: 'Ramesh', last: 'Yadav', gender: 'Male', dept: 'dept_nursing', shift: 'shift_day', desig: 'Staff Nurse', role: 'EMPLOYEE', ctc: 32000, join: '2021-08-11', mobile: '9826000004', city: 'Chhindwara', mgr: 'emp_103' },

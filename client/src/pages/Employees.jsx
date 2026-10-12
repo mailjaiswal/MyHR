@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Search, Users, IdCard, FileText, Loader2, UserPlus, Pencil, Archive, ArchiveRestore,
-  X, CalendarDays, Wallet, Plane, LayoutGrid, Download, TriangleAlert, Briefcase
+  X, CalendarDays, Wallet, Plane, LayoutGrid, Download, TriangleAlert, Briefcase, Mail, Calculator
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDateRange } from '../hooks/useDateRange';
 import useEscapeClose from '../hooks/useEscapeClose';
 import DateRangePicker from '../components/DateRangePicker';
 import { MonthGrid } from '../components/AttendanceCalendar';
+import SalaryStructureModal from '../components/SalaryStructureModal';
 
 const STATUS_PILL = {
   ACTIVE: 'status-ok', INACTIVE: 'status-warn', TERMINATED: 'status-bad', ON_LEAVE: 'status-muted'
@@ -32,7 +33,8 @@ const emptyForm = () => ({
   shift_id: '', date_of_joining: '', date_of_birth: '', mobile: '', email: '', biometric_user_id: '',
   employment_type: 'REGULAR', base_ctc: '', card_no: '', verify_mode: 'FINGERPRINT',
   nationality: '', city: '', contact_tel: '', office_tel: '',
-  uan: '', esi_ip: '', pan: '', bank_name: '', bank_account: '', bank_ifsc: ''
+  uan: '', esi_ip: '', pan: '', bank_name: '', bank_account: '', bank_ifsc: '',
+  send_welcome_email: true
 });
 
 function formFromEmployee(e) {
@@ -158,6 +160,18 @@ function EmployeeFormModal({ mode, form, setForm, departments, shifts, busy, idE
           {field('Date of joining', <input type="date" className="input" value={form.date_of_joining} onChange={e => onChangeField('date_of_joining', e.target.value)} />)}
           {field('Mobile', <input className="input" value={form.mobile} onChange={e => onChangeField('mobile', e.target.value)} placeholder="98…" />)}
           {field('Email', <input type="email" className="input" value={form.email} onChange={e => onChangeField('email', e.target.value)} placeholder="name@hospital.in" />)}
+          {mode === 'create' && field(
+            'Onboarding Welcome',
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.75rem', color: 'var(--text-heading)', cursor: 'pointer', marginTop: '0.35rem' }}>
+              <input
+                type="checkbox"
+                checked={form.send_welcome_email !== false}
+                onChange={e => onChangeField('send_welcome_email', e.target.checked)}
+              />
+              <span>Send offer letter &amp; checklist email</span>
+            </label>,
+            'Dispatches the configured offer letter & required document checklist on create'
+          )}
           {field(
             'Biometric ID',
             <input className="input mono" value={form.biometric_user_id} onChange={e => onChangeField('biometric_user_id', e.target.value)} onBlur={() => onChangeField('biometric_user_id', form.biometric_user_id, true)} placeholder="device user id" />,
@@ -370,6 +384,25 @@ export default function Employees() {
     } catch (err) { alert(err.message); }
   };
 
+  const [sendingPack, setSendingPack] = useState(false);
+  const [offerModalOpen, setOfferModalOpen] = useState(false);
+  const [offerComponents, setOfferComponents] = useState(['Offer Letter', 'Document Checklist']);
+  const [salaryModalOpen, setSalaryModalOpen] = useState(false);
+  const sendOnboardingPack = async () => {
+    if (!emp || !emp.email) {
+      alert('This employee does not have an email address configured.');
+      return;
+    }
+    if (!window.confirm(`Send official offer letter & onboarding document checklist to ${emp.full_name} (${emp.email})?`)) return;
+    setSendingPack(true);
+    try {
+      const res = await api(`/api/v1/organization/employees/${emp.id}/send-onboarding`, { method: 'POST' });
+      if (res.success) flash(res.message || 'Onboarding pack sent');
+      else alert(res.error || 'Failed to send onboarding email');
+    } catch (err) { alert(err.message); }
+    finally { setSendingPack(false); }
+  };
+
   const emp = detail?.employee;
   const tenure = detail?.tenure || {};
   const bannerSub = useMemo(() => {
@@ -500,6 +533,17 @@ export default function Employees() {
                   <button className="island-btn" style={{ padding: '0.3rem 0.7rem', fontSize: '0.6875rem' }} onClick={() => exportDossier('xlsx')}>
                     <Download size={12} /> Excel
                   </button>
+                  {isAdmin && emp.email && (
+                    <button
+                      className="island-btn"
+                      style={{ padding: '0.3rem 0.7rem', fontSize: '0.6875rem', color: 'var(--brand-primary-ink)' }}
+                      onClick={() => setOfferModalOpen(true)}
+                      disabled={sendingPack}
+                      title={`Send offer letter & document checklist email to ${emp.email}`}
+                    >
+                      <Mail size={12} /> {sendingPack ? 'Sending…' : 'Send Offer Pack'}
+                    </button>
+                  )}
                 </>
               )}
               {selectedId && (
@@ -596,7 +640,24 @@ export default function Employees() {
                 )}
 
                 {tab === 'payroll' && (
-                  <div className="table-wrap">
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', padding: '0.625rem 0.875rem', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                      <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                        Configured Base CTC: <strong style={{ color: 'var(--text-primary)' }}>₹{Number(emp?.base_ctc || 0).toLocaleString('en-IN')}</strong> / month
+                      </span>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          className="island-btn is-active"
+                          style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => setSalaryModalOpen(true)}
+                        >
+                          <Calculator size={13} />
+                          <span>Customize Structure & Levers</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="table-wrap">
                     <table className="swaniki-table">
                       <thead><tr><th>Month</th><th>Gross</th><th>Deductions</th><th>Net paid</th></tr></thead>
                       <tbody>
@@ -614,7 +675,8 @@ export default function Employees() {
                       </tbody>
                     </table>
                   </div>
-                )}
+                </div>
+              )}
 
                 {tab === 'leaves' && (
                   <>
@@ -695,6 +757,62 @@ export default function Employees() {
             </div>
           </div>
         </div>
+      )}
+
+      {offerModalOpen && emp && (
+        <div className="modal-overlay" onClick={() => setOfferModalOpen(false)}>
+          <div className="modal-card" style={{ width: '100%', maxWidth: '30rem', padding: 0 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-head" style={{ background: 'var(--bg-surface-subtle)', padding: '1rem 1.25rem' }}>
+              <div>
+                <span className="eyebrow">Send Offer Pack</span>
+                <h3 style={{ margin: 0 }}>Select components</h3>
+              </div>
+              <button className="icon-btn" onClick={() => setOfferModalOpen(false)}><X size={16} /></button>
+            </div>
+            <div style={{ padding: '1.125rem 1.25rem' }}>
+              <div className="field">
+                <label className="field-label">Components</label>
+                {['Offer Letter', 'Document Checklist', 'Welcome Guide'].map(c => (
+                  <div key={c} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                    <input type="checkbox" checked={offerComponents.includes(c)} onChange={e => {
+                      if (e.target.checked) setOfferComponents(prev => [...prev, c]);
+                      else setOfferComponents(prev => prev.filter(v => v !== c));
+                    }} />
+                    <span>{c}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
+                <button className="island-btn" onClick={() => setOfferModalOpen(false)}>Cancel</button>
+                <button className="island-btn is-active" onClick={async () => {
+                  setSendingPack(true);
+                  try {
+                    const res = await api(`/api/v1/organization/employees/${emp.id}/send-onboarding`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ components: offerComponents })
+                    });
+                    if (res.success) flash(res.message || 'Onboarding pack sent');
+                    else alert(res.error || 'Failed to send onboarding email');
+                  } catch (err) { alert(err.message); }
+                  finally { setSendingPack(false); setOfferModalOpen(false); }
+                }}>{sendingPack ? <Loader2 size={14} className="spin" /> : <Mail size={12} />} Send</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {salaryModalOpen && emp && (
+        <SalaryStructureModal
+          isOpen={true}
+          employee={emp}
+          onClose={() => setSalaryModalOpen(false)}
+          onSaved={() => {
+            loadDetail(emp.id);
+            loadList();
+          }}
+        />
       )}
     </div>
   );

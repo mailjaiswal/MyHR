@@ -17,7 +17,7 @@ const { db, pool, migrate } = require('../db/db');
 const attlog = require('../services/attlogImporter');
 const { runMonthlyPayroll } = require('../services/payrollEngine');
 
-const ADMIN_EMAIL = process.env.WIPE_ADMIN_EMAIL || 'admin@dubeynursinghome.in';
+const ADMIN_EMAIL = process.env.WIPE_ADMIN_EMAIL || 'mail.jaiswal@gmail.com';
 const ADMIN_PASSWORD = 'Welcome@123';
 
 function fileFromArgv() {
@@ -95,7 +95,7 @@ async function seedMasters() {
   ];
   const roles = [
     ['role_super', 'Super Admin', 'SUPER_ADMIN', 'ALL', ALL_PERMS, 1],
-    ['role_admin', 'HR Admin', 'ADMIN', 'ALL', ALL_PERMS.filter(p => p !== 'ACCESS_MANAGE'), 2],
+    ['role_admin', 'HR Admin', 'ADMIN', 'ALL', ALL_PERMS.filter(p => p !== 'DEMO_LAB'), 2],
     ['role_manager', 'Manager', 'MANAGER', 'TEAM', ['DASHBOARD_VIEW', 'ATTENDANCE_VIEW', 'ATTENDANCE_EDIT', 'REGULARIZATION_APPROVE', 'LEAVES_VIEW', 'LEAVES_REQUEST', 'LEAVES_APPROVE', 'ROSTER_VIEW', 'ROSTER_EDIT', 'EXPORTS', 'PAYROLL_VIEW', 'EMPLOYEES_VIEW'], 3],
     ['role_employee', 'Employee', 'EMPLOYEE', 'SELF', ['DASHBOARD_VIEW', 'ATTENDANCE_VIEW', 'LEAVES_VIEW', 'LEAVES_REQUEST', 'PAYROLL_VIEW', 'ROSTER_VIEW'], 4]
   ];
@@ -117,7 +117,7 @@ async function upsertAdmin(bioIds) {
       designation, department_id, shift_id, date_of_joining, base_ctc, email, role, role_id,
       password_hash, must_change_password, verify_mode, employment_type, status)
     VALUES (?, 'EMP-000', ?, 'HR', 'Administrator', 'HR Administrator', 'Other',
-      'HR Administrator', 'dept_admin', 'shift_gen8', ?, 0, ?, 'SUPER_ADMIN', 'role_super',
+      'HR Administrator', 'dept_admin', 'shift_gen8', ?, 0, ?, 'ADMIN', 'role_admin',
       ?, 1, 'PASSWORD', 'REGULAR', 'ACTIVE')
     ON CONFLICT (id) DO NOTHING
   `, id, bio, new Date().toISOString().slice(0, 10), ADMIN_EMAIL, hash);

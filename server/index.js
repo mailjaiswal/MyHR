@@ -60,10 +60,12 @@ app.use('/api/v1/organization', require('./routes/organization'));
 app.use('/api/v1/ingestion', require('./routes/ingestion'));
 app.use('/api/v1/leaves', require('./routes/leaves'));
 app.use('/api/v1/access', require('./routes/access'));
+app.use('/api/v1/rules', require('./routes/rules'));
 app.use('/api/v1/dashboard', require('./routes/dashboard'));
 app.use('/api/v1/audit', require('./routes/audit'));
 app.use('/api/v1/notifications', require('./routes/notifications'));
 app.use('/api/v1/backup', require('./routes/backup'));
+app.use('/api/v1/tenant', require('./routes/tenant'));
 
 // Serve client production bundle if available
 const clientDist = path.join(__dirname, '..', 'client', 'dist');

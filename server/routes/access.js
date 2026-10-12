@@ -11,10 +11,20 @@ const { notify } = require('../services/notificationService');
 // All endpoints require auth + ACCESS_MANAGE permission
 router.use(requireAuth, accessGuard, requirePerm('ACCESS_MANAGE'));
 
+// The platform owner (the single SUPER_ADMIN) is NOT company staff — hide the
+// role card, the member rows and every mutation target from company managers.
+const actorIsOwner = (req) => req.currentUser?.role === 'SUPER_ADMIN';
+async function isOwnerRow(employeeId) {
+  const row = await db.get(`SELECT 1 AS one FROM employees WHERE id = ? AND role = 'SUPER_ADMIN'`, employeeId);
+  return !!row;
+}
+
 // --- LIST ALL ROLES ---
 router.get('/roles', async (req, res) => {
   try {
-    const roles = await db.all('SELECT * FROM roles ORDER BY sort_order ASC');
+    const roles = await db.all(actorIsOwner(req)
+      ? 'SELECT * FROM roles ORDER BY sort_order ASC'
+      : `SELECT * FROM roles WHERE technical_key <> 'SUPER_ADMIN' ORDER BY sort_order ASC`);
     return res.json({ success: true, roles });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -62,6 +72,11 @@ router.patch('/roles/:id', async (req, res) => {
 
     const role = await db.get('SELECT * FROM roles WHERE id = ?', id);
     if (!role) return res.status(404).json({ error: 'Role not found' });
+
+    // The platform-owner role definition is untouchable except by the Super Admin itself.
+    if (role.technical_key === 'SUPER_ADMIN' && req.currentUser?.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Only the Super Admin may modify the SUPER_ADMIN role.' });
+    }
 
     const updates = [];
     const params = [];
@@ -126,6 +141,7 @@ router.get('/roles/:id/members', async (req, res) => {
       FROM employees e
       LEFT JOIN departments d ON e.department_id = d.id
       WHERE e.role_id = ? AND e.status = 'ACTIVE'
+        ${actorIsOwner(req) ? '' : `AND e.role <> 'SUPER_ADMIN'`}
       ORDER BY e.full_name
     `, id);
     return res.json({ success: true, members });
@@ -141,14 +157,27 @@ router.patch('/employees/:id/role', async (req, res) => {
     const { role_id } = req.body;
     if (!role_id) return res.status(400).json({ error: 'role_id is required' });
 
-    const emp = await db.get('SELECT id, full_name, role_id FROM employees WHERE id = ?', id);
+    const emp = await db.get('SELECT id, full_name, role_id, role FROM employees WHERE id = ?', id);
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
 
-    const role = await db.get('SELECT id, name FROM roles WHERE id = ?', role_id);
+    // Company managers can't even see, let alone re-role, the platform owner.
+    if (emp.role === 'SUPER_ADMIN' && !actorIsOwner(req)) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    const role = await db.get('SELECT id, name, technical_key FROM roles WHERE id = ?', role_id);
     if (!role) return res.status(400).json({ error: 'Role not found' });
 
+    // SUPER_ADMIN is reserved for the single platform owner — only a Super Admin
+    // may hand it out, and never to themselves via this screen (owner stays one).
+    if (role.technical_key === 'SUPER_ADMIN' && req.currentUser?.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'SUPER_ADMIN cannot be assigned from company management screens.' });
+    }
+
     const prevRole = emp.role_id ? await db.get('SELECT name FROM roles WHERE id = ?', emp.role_id) : null;
-    await db.run('UPDATE employees SET role_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', role_id, id);
+    // Keep the legacy employees.role column in sync with role_id — permissions
+    // resolve from role_id while labels/scopes and guards read employees.role.
+    await db.run('UPDATE employees SET role_id = ?, role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', role_id, role.technical_key, id);
     await audit(req, 'access.employee_role_assign', {
       entityType: 'employee', entityId: id,
       summary: `Role for '${emp.full_name}' changed from '${prevRole?.name || 'none'}' to '${role.name}'`,
@@ -171,6 +200,7 @@ router.get('/hierarchy', async (req, res) => {
       LEFT JOIN roles r ON e.role_id = r.id
       LEFT JOIN departments d ON e.department_id = d.id
       WHERE e.status = 'ACTIVE'
+        ${actorIsOwner(req) ? '' : `AND e.role <> 'SUPER_ADMIN'`}
       ORDER BY e.designation
     `);
     return res.json({ success: true, hierarchy: rows });
@@ -185,13 +215,19 @@ router.patch('/employees/:id/manager', async (req, res) => {
     const { id } = req.params;
     const { manager_id } = req.body;
 
-    const emp = await db.get('SELECT id, full_name, manager_id FROM employees WHERE id = ?', id);
+    const emp = await db.get('SELECT id, full_name, manager_id, role FROM employees WHERE id = ?', id);
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
+    if (emp.role === 'SUPER_ADMIN' && !actorIsOwner(req)) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
 
     let mgr = null;
     if (manager_id) {
-      mgr = await db.get('SELECT id, full_name FROM employees WHERE id = ?', manager_id);
+      mgr = await db.get('SELECT id, full_name, role FROM employees WHERE id = ?', manager_id);
       if (!mgr) return res.status(400).json({ error: 'Manager not found' });
+      if (mgr.role === 'SUPER_ADMIN' && !actorIsOwner(req)) {
+        return res.status(400).json({ error: 'Manager not found' });
+      }
       // Prevent self-reference
       if (manager_id === id) return res.status(400).json({ error: 'Cannot be own manager' });
     }
