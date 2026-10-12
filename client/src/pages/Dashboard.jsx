@@ -118,31 +118,46 @@ export default function Dashboard({ onNavigate }) {
       )}
 
       {/* Trend Chart */}
-      {trend.length > 0 && (
-        <section className="section-card">
-          <div className="section-head">
-            <span className="section-title"><TrendingUp size={16} /> Attendance Trend</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-caption)' }}>Hours logged &middot; {dateRange.label}</span>
-          </div>
-          <div className="section-body">
-            <div className={`bar-chart${trend.length > 10 ? ' bar-chart-dense' : ''}`}>
-              {trend.map(t => {
-                const total = Number(t.present) + Number(t.absent) + Number(t.half_day);
-                const presentPct = total > 0 ? Math.round((Number(t.present) / total) * 100) : 0;
-                return (
-                  <div className="bar-col" key={t.day} title={`${t.label} - ${presentPct}% present - ${Number(t.hours || 0)}h logged`}>
-                    <span className={`bar-hours${presentPct < 50 ? ' bar-hours-warn' : ''}`}>{Number(t.hours || 0)}h</span>
-                    <span className="bar-track">
-                      <span className="bar-fill-ok" style={{ height: `${Math.max(presentPct, 3)}%` }} />
-                    </span>
-                    <span className="bar-label">{t.label}</span>
-                  </div>
-                );
-              })}
+      {trend.length > 0 && (() => {
+        // Duration + day-wise aggregates for the visible scope.
+        const totalHours = trend.reduce((a, t) => a + Number(t.hours || 0), 0);
+        const totalPresent = trend.reduce((a, t) => a + Number(t.present || 0), 0);
+        const days = trend.length || 1;
+        const avgHours = Math.round((totalHours / days) * 10) / 10;
+        const avgPresent = Math.round(totalPresent / days);
+        const maxPresent = Math.max(...trend.map(t => Number(t.present || 0)), 1);
+        const fmtH = (n) => (Number.isInteger(n) ? n : n.toFixed(1));
+        return (
+          <section className="section-card">
+            <div className="section-head">
+              <span className="section-title"><TrendingUp size={16} /> Attendance Trend</span>
+              <div className="trend-metrics">
+                <span className="trend-metric"><Clock3 size={13} /> Total <strong>{fmtH(totalHours)}h</strong> <em>{dateRange.label}</em></span>
+                <span className="trend-metric"><Activity size={13} /> Daily avg <strong>{fmtH(avgHours)}h</strong></span>
+                <span className="trend-metric"><UserCheck size={13} /> Avg <strong>{avgPresent}</strong> present/day</span>
+              </div>
             </div>
-          </div>
-        </section>
-      )}
+            <div className="section-body">
+              <div className={`bar-chart${trend.length > 10 ? ' bar-chart-dense' : ''}`}>
+                {trend.map(t => {
+                  const present = Number(t.present || 0);
+                  const hours = Number(t.hours || 0);
+                  const presentPct = maxPresent > 0 ? Math.round((present / maxPresent) * 100) : 0;
+                  return (
+                    <div className="bar-col" key={t.day} title={`${t.label} - ${present} present - ${hours}h logged`}>
+                      <span className="bar-hours">{present}</span>
+                      <span className="bar-track">
+                        <span className="bar-fill-ok" style={{ height: `${Math.max(presentPct, 3)}%` }} />
+                      </span>
+                      <span className="bar-label">{t.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* Department breakdown (visible for DEPARTMENT and ALL scopes) */}
       {(dataScope === 'ALL' || dataScope === 'DEPARTMENT') && summary?.deptStats?.length > 0 && (

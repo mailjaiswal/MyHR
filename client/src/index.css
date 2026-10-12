@@ -1654,9 +1654,16 @@ select.input {
 .bar-fill-bad { background: linear-gradient(180deg, #f59e0b, var(--brand-rose)); }
 .bar-label { font-size: 0.5938rem; color: var(--text-caption); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 
+/* Attendance Trend header metrics: total hours, daily avg hours, avg present/day. */
+.trend-metrics { display: flex; flex-wrap: wrap; gap: 0.375rem 0.875rem; align-items: center; }
+.trend-metric { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.7188rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.trend-metric strong { color: var(--text-heading); font-weight: 700; }
+.trend-metric em { color: var(--text-caption); font-style: normal; font-size: 0.6563rem; }
+.trend-metric svg { color: var(--brand-primary-ink); }
+
 /* Dense ranges (e.g. a full month = ~30 daily columns): stand the date label and
-   the total-hours value vertical so both stay fully readable instead of being
-   ellipsis-truncated (dates) or overlapping neighbours (hours). */
+   the day-wise present-count value vertical so both stay fully readable instead of
+   being ellipsis-truncated (dates) or overlapping neighbours (values). */
 .bar-chart-dense { height: 12rem; }
 .bar-chart-dense .bar-hours {
   writing-mode: vertical-rl;
