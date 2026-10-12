@@ -31,6 +31,8 @@ export default function Dashboard({ onNavigate }) {
   const [pending, setPending] = useState(null);
   const [myRecords, setMyRecords] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Which per-day metric the Attendance Trend bars represent.
+  const [trendMetric, setTrendMetric] = useState('present');
 
   // { cache: true } ⇒ back-navigation to the dashboard paints instantly from
   // the shared GET cache; any write anywhere in the app invalidates it.
@@ -125,8 +127,18 @@ export default function Dashboard({ onNavigate }) {
         const days = trend.length || 1;
         const avgHours = Math.round((totalHours / days) * 10) / 10;
         const avgPresent = Math.round(totalPresent / days);
-        const maxPresent = Math.max(...trend.map(t => Number(t.present || 0)), 1);
         const fmtH = (n) => (Number.isInteger(n) ? n : n.toFixed(1));
+
+        // Field chooser: what each daily bar + its value label represents.
+        const perDayAvg = (t) => { const p = Number(t.present || 0); return p > 0 ? Math.round(Number(t.hours || 0) / p * 10) / 10 : 0; };
+        const METRICS = {
+          present:  { label: 'Employees present', pick: (t) => Number(t.present || 0), unit: '',  tip: (t, v) => `${v} present` },
+          hours:    { label: 'Total hours logged', pick: (t) => Number(t.hours || 0),  unit: 'h', tip: (t, v) => `${fmtH(v)}h logged` },
+          avgHours: { label: 'Avg hrs / employee', pick: perDayAvg,                   unit: 'h', tip: (t, v) => `${fmtH(v)}h avg / employee` },
+        };
+        const active = METRICS[trendMetric] || METRICS.present;
+        const maxVal = Math.max(...trend.map(active.pick), 1);
+
         return (
           <section className="section-card">
             <div className="section-head">
@@ -137,17 +149,27 @@ export default function Dashboard({ onNavigate }) {
                 <span className="trend-metric"><UserCheck size={13} /> Avg <strong>{avgPresent}</strong> present/day</span>
               </div>
             </div>
+            <div className="trend-chooser" role="tablist" aria-label="Trend metric">
+              {Object.entries(METRICS).map(([key, m]) => (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={trendMetric === key}
+                  className={`trend-choice${trendMetric === key ? ' is-active' : ''}`}
+                  onClick={() => setTrendMetric(key)}
+                >{m.label}</button>
+              ))}
+            </div>
             <div className="section-body">
               <div className={`bar-chart${trend.length > 10 ? ' bar-chart-dense' : ''}`}>
                 {trend.map(t => {
-                  const present = Number(t.present || 0);
-                  const hours = Number(t.hours || 0);
-                  const presentPct = maxPresent > 0 ? Math.round((present / maxPresent) * 100) : 0;
+                  const val = active.pick(t);
+                  const pct = maxVal > 0 ? Math.round((val / maxVal) * 100) : 0;
                   return (
-                    <div className="bar-col" key={t.day} title={`${t.label} - ${present} present - ${hours}h logged`}>
-                      <span className="bar-hours">{present}</span>
+                    <div className="bar-col" key={t.day} title={`${t.label} · ${active.tip(t, val)} · ${Number(t.present||0)} present · ${fmtH(Number(t.hours||0))}h`}>
+                      <span className="bar-hours">{fmtH(val)}{active.unit}</span>
                       <span className="bar-track">
-                        <span className="bar-fill-ok" style={{ height: `${Math.max(presentPct, 3)}%` }} />
+                        <span className="bar-fill-ok" style={{ height: `${Math.max(pct, 3)}%` }} />
                       </span>
                       <span className="bar-label">{t.label}</span>
                     </div>
