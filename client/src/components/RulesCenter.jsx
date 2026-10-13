@@ -8,6 +8,7 @@ import {
   Save, Loader2, Check, Plus, Trash2, CalendarDays, Timer, Scale, Gavel, X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { dialogConfirm } from '../utils/dialog';
 
 function useRuleApi() {
   const { authFetch } = useAuth();
@@ -215,7 +216,7 @@ export function HolidaysSection() {
   };
 
   const remove = async (h) => {
-    if (!window.confirm(`Remove holiday '${h.name}' (${String(h.holiday_date).slice(0, 10)})?`)) return;
+    if (!(await dialogConfirm(`Remove holiday '${h.name}' (${String(h.holiday_date).slice(0, 10)})?`, { title: 'Remove holiday', confirmLabel: 'Remove', tone: 'danger' }))) return;
     await post(`/api/v1/rules/holidays/${h.id}`, 'DELETE', {});
   };
 

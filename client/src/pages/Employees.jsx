@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { dialogConfirm } from '../utils/dialog';
 import {
   Search, Users, IdCard, FileText, Loader2, UserPlus, Pencil, Archive, ArchiveRestore,
   X, CalendarDays, Wallet, Plane, LayoutGrid, Download, TriangleAlert, Briefcase, Mail, Calculator
@@ -393,7 +394,7 @@ export default function Employees() {
       alert('This employee does not have an email address configured.');
       return;
     }
-    if (!window.confirm(`Send official offer letter & onboarding document checklist to ${emp.full_name} (${emp.email})?`)) return;
+    if (!(await dialogConfirm(`Send official offer letter & onboarding document checklist to ${emp.full_name} (${emp.email})?`, { title: 'Send onboarding pack', confirmLabel: 'Send', tone: 'question' }))) return;
     setSendingPack(true);
     try {
       const res = await api(`/api/v1/organization/employees/${emp.id}/send-onboarding`, { method: 'POST' });

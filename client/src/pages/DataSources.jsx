@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import useEscapeClose from '../hooks/useEscapeClose';
+import { dialogConfirm } from '../utils/dialog';
 import {
   Database, PlugZap, UploadCloud, RefreshCw, Trash2, Pencil, CheckCircle2,
   XCircle, Loader2, Server, FileText, Clock3, Settings2, Wifi, HardDrive, Link2,
@@ -289,7 +290,7 @@ export default function DataSources({ onNavigate }) {
   };
 
   const handleDelete = async (src) => {
-    if (!window.confirm(`Delete data source "${src.name}" and its sync history?`)) return;
+    if (!(await dialogConfirm(`Delete data source "${src.name}" and its sync history?`, { title: 'Delete data source', confirmLabel: 'Delete', tone: 'danger' }))) return;
     setBusy(`DEL_${src.id}`);
     try {
       const res = await fetch(`/api/v1/ingestion/sources/${src.id}`, { method: 'DELETE' });
@@ -480,10 +481,11 @@ export default function DataSources({ onNavigate }) {
   // ── Undo one completed import: remove its punches, rebuild affected attendance,
   // and drop the employees/devices that import auto-created (only if unused).
   const handleRevert = async (l) => {
-    const ok = window.confirm(
+    const ok = await dialogConfirm(
       `Undo "${l.source_name}" (${new Date(l.started_at).toLocaleString('en-IN')})?\n\n` +
       `This deletes the ${l.records_imported || 0} punch(es) that import added and rebuilds their attendance. ` +
-      `Employees/devices it auto-created are removed only if nothing else references them. This cannot be undone.`
+      `Employees/devices it auto-created are removed only if nothing else references them. This cannot be undone.`,
+      { title: 'Undo import', confirmLabel: 'Undo import', tone: 'danger' }
     );
     if (!ok) return;
     setBusy(`REVERT_${l.id}`);

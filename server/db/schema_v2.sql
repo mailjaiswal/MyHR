@@ -572,3 +572,26 @@ CREATE INDEX IF NOT EXISTS idx_payslips_emp_month ON payslips (employee_id, mont
 CREATE INDEX IF NOT EXISTS idx_leave_emp ON leave_requests (employee_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_corrections_status ON attendance_corrections (status, created_at);
 CREATE INDEX IF NOT EXISTS idx_emp_status ON employees (status);
+
+-- ============================================================
+-- Migration V9 — Platform tenant registry (Master Admin provisioning).
+-- The Master Admin "Provision New Client" flow needs a durable record per
+-- company. Root DB is PostgreSQL (single shared DB + organizations row per
+-- tenant), so this replaces the never-ported V4 per-tenant-SQLite design.
+-- CREATE TABLE IF NOT EXISTS ⇒ safe on every boot.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS tenants (
+  id TEXT PRIMARY KEY,
+  company_name TEXT NOT NULL,
+  industry TEXT DEFAULT '',
+  admin_email TEXT DEFAULT '',
+  admin_name TEXT DEFAULT '',
+  phone TEXT DEFAULT '',
+  address TEXT DEFAULT '',
+  employee_count INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'ACTIVE',
+  organization_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants (status);

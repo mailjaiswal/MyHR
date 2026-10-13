@@ -8,7 +8,12 @@ import PasswordChangeModal from './components/PasswordChangeModal';
 import OnboardingWizardModal from './components/OnboardingWizardModal';
 import Login from './pages/Login';
 import useSpotlight from './hooks/useSpotlight';
+import GlobalDialog from './components/GlobalDialog';
+import { installDialogOverrides } from './utils/dialog';
 import { Menu as MenuIcon, Loader2 } from 'lucide-react';
+
+// Native alert() everywhere in the app now renders as a centered themed dialog.
+installDialogOverrides();
 
 // Pages are code-split: the initial shell only ships Login + Dashboard +
 // sidebar chrome. Everything else streams in on first visit, and below we
@@ -203,6 +208,8 @@ export default function App() {
       <AuthProvider>
         <OrganizationProvider>
           <AppContent />
+          {/* Root-level themed dialog host: available on Login, loading and every page. */}
+          <GlobalDialog />
         </OrganizationProvider>
       </AuthProvider>
     </ThemeProvider>

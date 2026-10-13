@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import useEscapeClose from '../hooks/useEscapeClose';
 import DataSources from './DataSources';
 import { AttendanceRulesSection, OvertimeRulesSection, HolidaysSection, StatutorySection } from '../components/RulesCenter';
+import { dialogConfirm } from '../utils/dialog';
 
 const FIELDS = ['name', 'tagline', 'industry_label', 'address', 'contact_person', 'director_name', 'director_title', 'contact_phone', 'contact_email', 'gstin', 'registration_no'];
 
@@ -157,7 +158,7 @@ export default function Settings({ initialTab, onNavigate }) {
       alert(`Cannot delete '${d.name}': ${d.employee_count} employee(s) are currently assigned to it. Reassign them first.`);
       return;
     }
-    if (!window.confirm(`Are you sure you want to delete department '${d.name}'?`)) return;
+    if (!(await dialogConfirm(`Are you sure you want to delete department '${d.name}'? This cannot be undone.`, { title: 'Delete department', confirmLabel: 'Delete', tone: 'danger' }))) return;
     try {
       const res = await api(`/api/v1/organization/departments/${d.id}`, { method: 'DELETE' });
       if (res.success) { flash(`Department '${d.name}' deleted`); load(); }
@@ -327,7 +328,7 @@ export default function Settings({ initialTab, onNavigate }) {
   };
 
   const deleteRole = async (role) => {
-    if (!window.confirm(`Delete role '${role.name}'?`)) return;
+    if (!(await dialogConfirm(`Delete role '${role.name}'?`, { title: 'Delete role', confirmLabel: 'Delete', tone: 'danger' }))) return;
     const d = await api(`/api/v1/access/roles/${role.id}`, { method: 'DELETE' });
     if (d.success) loadAccess(); else alert(d.error || 'Failed to delete role');
   };
@@ -1796,7 +1797,7 @@ export default function Settings({ initialTab, onNavigate }) {
                       {backupBusy === 'test' ? <Loader2 size={14} className="spin" /> : <Play size={14} />} Test connection
                     </button>
                     {backup.target === 's3' && (
-                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger-ink)' }} onClick={() => window.confirm('Remove your storage details? Daily backups will pause until a destination is added again.') && saveStorageSettings({ clear: true })}>
+                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger-ink)' }} onClick={async () => { if (await dialogConfirm('Remove your storage details? Daily backups will pause until a destination is added again.', { title: 'Remove storage', confirmLabel: 'Remove', tone: 'danger' })) saveStorageSettings({ clear: true }); }}>
                         <Trash2 size={14} /> Remove storage
                       </button>
                     )}
